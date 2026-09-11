@@ -26,13 +26,25 @@ export interface ThreadEvent {
   recipientId: string;
 }
 
-const local = new EventEmitter();
+/**
+ * Эмиттер и флаги моста живут в globalThis, а не в переменных модуля.
+ *
+ * В dev Next переинициализирует модули, и здесь это не косметика.
+ * Открытый SSE-поток остаётся подписанным на прежний эмиттер, а
+ * `publishThreadEvent` уже публикует в новый: сообщение сохраняется
+ * и появляется только после обновления страницы. Со стороны это
+ * выглядит не как поломка, а как задержка сети, поэтому и не находится.
+ */
+const globalForEvents = globalThis as unknown as {
+  fhrEvents?: EventEmitter;
+  fhrEventsBridged?: boolean;
+  fhrEventsWarned?: boolean;
+};
+
+const local = (globalForEvents.fhrEvents ??= new EventEmitter());
 // Слушателей столько же, сколько открытых вкладок: предупреждение Node
 // о «возможной утечке» здесь было бы ложной тревогой
 local.setMaxListeners(0);
-
-let bridged = false;
-let bridgeWarned = false;
 
 /**
  * Сообщаем о недоступном Redis один раз за процесс.
@@ -42,8 +54,8 @@ let bridgeWarned = false;
  * той же строки, в которой тонут настоящие ошибки.
  */
 function warnBridgeDown(reason: string): void {
-  if (bridgeWarned) return;
-  bridgeWarned = true;
+  if (globalForEvents.fhrEventsWarned) return;
+  globalForEvents.fhrEventsWarned = true;
   console.warn(
     `[events] Redis недоступен (${reason || 'соединение отклонено'}) — ` +
       'события переписки доставляются в пределах процесса',
@@ -51,8 +63,8 @@ function warnBridgeDown(reason: string): void {
 }
 
 function ensureBridge(): void {
-  if (bridged) return;
-  bridged = true;
+  if (globalForEvents.fhrEventsBridged) return;
+  globalForEvents.fhrEventsBridged = true;
 
   const redis = getRedis();
   if (!redis) return; // без Redis локального эмиттера достаточно

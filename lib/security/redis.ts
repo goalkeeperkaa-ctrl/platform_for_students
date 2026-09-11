@@ -9,29 +9,45 @@ import type { Redis } from 'ioredis';
  * поэтому отсутствие URL логируется один раз при первом обращении.
  */
 
-let client: Redis | null | undefined;
-let warned = false;
+/**
+ * Клиент живёт в globalThis, а не в переменной модуля.
+ *
+ * В dev Next переинициализирует модули, и `let` на этом уровне обнуляется.
+ * Без кеша каждая переинициализация заводила бы ещё один клиент ioredis:
+ * новая серия попыток подключения, новое соединение и ещё одна копия
+ * одного и того же предупреждения в логе. За сессию разработки лог
+ * превращался в стену, в которой тонут настоящие ошибки, — ровно то,
+ * от чего ниже защищает флаг `reported`, но на уровне одного клиента.
+ *
+ * `undefined` значит «ещё не инициализировали», `null` — «Redis нет».
+ * Разница существенная: без неё попытка подключения повторялась бы
+ * на каждый вызов.
+ */
+const globalForRedis = globalThis as unknown as {
+  fhrRedis?: Redis | null;
+  fhrRedisWarned?: boolean;
+};
 
 export function getRedis(): Redis | null {
-  if (client !== undefined) return client;
+  if (globalForRedis.fhrRedis !== undefined) return globalForRedis.fhrRedis;
 
   const url = process.env.REDIS_URL;
   if (!url) {
-    if (!warned) {
-      warned = true;
+    if (!globalForRedis.fhrRedisWarned) {
+      globalForRedis.fhrRedisWarned = true;
       console.warn(
         '[redis] REDIS_URL не задан — лимиты и кеш работают в памяти процесса. ' +
           'Для нескольких инстансов это некорректно.',
       );
     }
-    client = null;
+    globalForRedis.fhrRedis = null;
     return null;
   }
 
   try {
     // require, а не import: модуль не должен попадать в бандл, когда Redis не нужен
     const IORedis = require('ioredis') as typeof import('ioredis').default;
-    client = new IORedis(url, {
+    const client = new IORedis(url, {
       maxRetriesPerRequest: 2,
       lazyConnect: false,
       // Упавший Redis не должен подвешивать запрос: лучше отработать
@@ -53,11 +69,12 @@ export function getRedis(): Redis | null {
           'лимиты и события переписки работают в памяти процесса',
       );
     });
+    globalForRedis.fhrRedis = client;
   } catch (err) {
     console.error('[redis] не удалось инициализировать клиент:', err);
-    client = null;
+    globalForRedis.fhrRedis = null;
   }
-  return client;
+  return globalForRedis.fhrRedis ?? null;
 }
 
 /** Кеш на короткой TTL. Промах и недоступный Redis неотличимы — оба дают null. */
