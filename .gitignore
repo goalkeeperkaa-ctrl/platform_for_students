@@ -24,3 +24,6 @@ yarn-error.log*
 next-env.d.ts
 coverage/
 .vercel
+
+# Резервные копии базы: содержат все данные платформы
+backups/
