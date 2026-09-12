@@ -161,6 +161,34 @@ export interface AuditRecord {
 
 // ============ Входные данные ============
 
+/**
+ * Что студент может менять в своём профиле.
+ *
+ * Почты и пароля здесь нет намеренно. Почта — это удостоверение: сменить
+ * её без подтверждения нового адреса значит позволить увести учётную
+ * запись. Пароль меняют отдельным действием, а не заодно с городом.
+ *
+ * Согласия на ПДн тоже нет: это юридический факт с датой и версией,
+ * а не поле анкеты. Передумал — удаляй профиль.
+ */
+export interface StudentProfileUpdate {
+  fullName: string;
+  phone: string | null;
+  gender: Gender;
+  birthYear: number;
+  photoUrl: string | null;
+  resumeUrl: string | null;
+  resumeName: string | null;
+  university: string;
+  speciality: string;
+  studyYear: number;
+  city: string | null;
+  workDays: Weekday[];
+  hoursPerWeek: number | null;
+  skills: string[];
+  about: string | null;
+}
+
 export interface NewStudentInput {
   email: string;
   password: string;
@@ -236,6 +264,20 @@ export interface DataStore {
     findById(id: string): Promise<StudentRecord | null>;
     list(): Promise<StudentRecord[]>;
     setStatus(id: string, status: StudentStatus): Promise<void>;
+    update(id: string, input: StudentProfileUpdate): Promise<StudentRecord>;
+    /**
+     * Удаление по требованию человека (152-ФЗ, право на отзыв согласия).
+     *
+     * Удаляется учётная запись, а не анкета: каскады уносят анкету,
+     * свайпы, отклики и переписку разом. Оставить учётку значило бы
+     * оставить почту — то есть персональные данные, ради удаления
+     * которых всё и затевалось.
+     *
+     * Журнал аудита переживает удаление: ссылка на аккаунт обнуляется,
+     * а подпись актора в записи остаётся. Журнал, теряющий записи
+     * вместе с тем, о ком они, перестаёт быть журналом.
+     */
+    deleteByAccountId(accountId: string): Promise<void>;
   };
 
   employers: {

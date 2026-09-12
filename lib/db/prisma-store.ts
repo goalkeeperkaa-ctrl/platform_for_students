@@ -78,6 +78,38 @@ export function createPrismaStore(): DataStore {
       async setStatus(id, status) {
         await prisma.student.update({ where: { id }, data: { status } });
       },
+
+      update(id, input) {
+        return prisma.student.update({
+          where: { id },
+          data: {
+            fullNameEnc: encrypt(input.fullName),
+            // Пустой телефон — это отсутствие телефона, а не шифротекст
+            // пустой строки: иначе «не указан» и «указан пустым» стали бы
+            // разными состояниями, и первое перестало бы находиться
+            phoneEnc: input.phone ? encrypt(input.phone) : null,
+            gender: input.gender,
+            birthYear: input.birthYear,
+            photoUrl: input.photoUrl,
+            resumeUrl: input.resumeUrl,
+            resumeName: input.resumeName,
+            university: input.university,
+            speciality: input.speciality,
+            studyYear: input.studyYear,
+            city: input.city,
+            workDays: input.workDays,
+            hoursPerWeek: input.hoursPerWeek,
+            skills: input.skills,
+            about: input.about,
+          },
+        });
+      },
+
+      async deleteByAccountId(accountId) {
+        // Каскады в схеме уносят анкету, свайпы, отклики и переписку.
+        // Журнал аудита остаётся: у него ссылка обнуляется, а не удаляется.
+        await prisma.account.delete({ where: { id: accountId } });
+      },
     },
 
     employers: {

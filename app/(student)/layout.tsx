@@ -33,7 +33,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   return (
     <AppShell
-      user={{ name: studentName(student), subtitle: student.university }}
+      user={{ name: studentName(student), subtitle: student.university, href: '/profile' }}
       nav={[
         { href: '/feed', label: 'Лента' },
         { href: '/applications', label: 'Отклики', badge: applications.length },
@@ -41,6 +41,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
         // единственное, ради чего сюда заходят, — новый ответ
         { href: '/messages', label: 'Сообщения', badge: unread },
         { href: '/skipped', label: 'Пропущенные', badge: skipped.length },
+        { href: '/profile', label: 'Профиль' },
       ]}
     >
       {children}

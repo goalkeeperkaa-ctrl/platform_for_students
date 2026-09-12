@@ -98,6 +98,28 @@ export const registrationSchema = registrationSteps.identity
 
 export type RegistrationInput = z.infer<typeof registrationSchema>;
 
+/**
+ * Изменение профиля.
+ *
+ * Собрано из тех же шагов, что и регистрация, а не переписано рядом:
+ * два набора правил для одних и тех же полей разъезжаются на первой же
+ * правке, и тогда анкета, прошедшая регистрацию, перестаёт сохраняться
+ * при редактировании — или наоборот.
+ *
+ * Шага `account` здесь нет: почта — удостоверение, её смена требует
+ * подтверждения нового адреса; пароль меняют отдельно; согласие на ПДн
+ * — юридический факт с датой и версией, а не поле анкеты. Телефон из
+ * этого шага нужен, поэтому добавлен отдельно.
+ */
+export const profileUpdateSchema = registrationSteps.identity
+  .merge(registrationSteps.photo)
+  .merge(registrationSteps.education)
+  .merge(registrationSteps.schedule)
+  .merge(registrationSteps.skills)
+  .extend({ phone: phoneSchema });
+
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
+
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Введите пароль'),

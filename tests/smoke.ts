@@ -147,6 +147,15 @@ async function main() {
   });
   check('регистрация без согласия на ПДн отвергнута', noConsent.status === 400, noConsent.body);
 
+  // Регистрация сама выдаёт сессию, поэтому «зарегистрировался» ещё не
+  // значит «сможет войти». Ровно этот путь — выйти и войти снова — не
+  // проверялся вовсе, и сломайся хеширование пароля на одной из сторон,
+  // все проверки выше остались бы зелёными.
+  const relogin = await new Session().post('/api/auth/login', { email, password: 'Smoke12345!' });
+  check('после регистрации можно войти заново', relogin.status === 200, relogin.body);
+  const reloginWrong = await new Session().post('/api/auth/login', { email, password: 'Smoke12345?' });
+  check('чужой пароль к той же почте не подходит', reloginWrong.status === 401, reloginWrong.status);
+
   const feed = await student.request('/api/feed');
   const vacancies = feed.body.vacancies as Array<{ id: string; matchScore: number }>;
   check('лента непустая', Array.isArray(vacancies) && vacancies.length > 0);
@@ -421,6 +430,83 @@ async function main() {
   check('чужой файл неотличим от несуществующего', foreignFile.status === 404, foreignFile.status);
   const foreignResume = await employer.request('/api/files/resume/not-mine.pdf');
   check('резюме чужого студента закрыто', foreignResume.status === 404, foreignResume.status);
+
+  // ---------- Профиль ----------
+  // Отдельный студент: удаление в конце раздела не должно выбить
+  // из-под ног сессии, на которых держатся проверки выше.
+  console.log('\nПрофиль');
+  const owner = new Session();
+  const ownerEmail = `smoke-profile-${Date.now()}@demo.ru`;
+  const ownerProfile = {
+    fullName: 'Профиль Проверочный',
+    gender: 'FEMALE',
+    birthYear: 2004,
+    photoUrl: null,
+    university: 'МГУ',
+    speciality: 'Экономика',
+    studyYear: 2,
+    city: 'Москва',
+    workDays: ['MON', 'TUE'],
+    hoursPerWeek: 16,
+    skills: ['Excel'],
+    about: null,
+    resumeUrl: null,
+    resumeName: null,
+    phone: '+7 900 555-44-33',
+  };
+  const ownerCreated = await owner.post('/api/auth/register', {
+    ...ownerProfile,
+    email: ownerEmail,
+    password: 'Smoke12345!',
+    consent: true,
+  });
+  check('студент для проверки профиля заведён', ownerCreated.status === 201, ownerCreated.body);
+
+  check('страница профиля открывается студенту', (await owner.request('/profile')).status === 200);
+  const guestProfile = await new Session().request('/profile');
+  check('гостя со страницы профиля уводят на вход', guestProfile.status === 307, guestProfile.status);
+  check(
+    'гостю менять профиль нельзя',
+    (await new Session().patch('/api/students/me', ownerProfile)).status === 401,
+  );
+
+  const renamed = await owner.patch('/api/students/me', {
+    ...ownerProfile,
+    fullName: 'Профиль Изменённый',
+    city: 'Казань',
+    studyYear: 3,
+  });
+  check('изменения профиля сохраняются', renamed.status === 200, renamed.body);
+  const me = await owner.request('/api/auth/me');
+  // Имя в шапке берётся из сессионного токена — если его не переподписать,
+  // человек сохранит новое имя и продолжит видеть старое
+  check('новое имя сразу попадает в сессию', me.body.session?.name === 'Профиль Изменённый', me.body);
+
+  const invalid = await owner.patch('/api/students/me', { ...ownerProfile, studyYear: 9 });
+  check('кривые данные профиля отвергнуты', invalid.status === 400, invalid.status);
+
+  const erased = await owner.delete('/api/students/me', {});
+  check('профиль удаляется', erased.status === 200, erased.body);
+  check('после удаления сессии нет', (await owner.request('/api/auth/me')).body.session === null);
+  const afterErase = await new Session().post('/api/auth/login', {
+    email: ownerEmail,
+    password: 'Smoke12345!',
+  });
+  check('войти в удалённый профиль нельзя', afterErase.status === 401, afterErase.status);
+  const reRegister = await new Session().post('/api/auth/register', {
+    ...ownerProfile,
+    email: ownerEmail,
+    password: 'Smoke12345!',
+    consent: true,
+  });
+  // Почта освобождается вместе с данными: иначе удалённый человек не
+  // смог бы вернуться, а его адрес так и остался бы лежать в базе
+  check('после удаления почту можно занять снова', reRegister.status === 201, reRegister.body);
+  if (reRegister.status === 201) {
+    const again = new Session();
+    await again.post('/api/auth/login', { email: ownerEmail, password: 'Smoke12345!' });
+    await again.delete('/api/students/me', {});
+  }
 
   // ---------- Перебор пароля ----------
   // Порог висит на учётной записи, а не только на адресе: за одним IP

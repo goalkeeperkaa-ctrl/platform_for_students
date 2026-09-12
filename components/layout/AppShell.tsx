@@ -19,7 +19,7 @@ export function AppShell({
   wide = false,
 }: {
   nav?: NavItem[];
-  user?: { name: string; subtitle?: string };
+  user?: { name: string; subtitle?: string; href?: string };
   children: React.ReactNode;
   wide?: boolean;
 }) {
@@ -37,7 +37,7 @@ export function AppShell({
           {nav && <NavTabs items={nav} className="hidden md:flex" />}
 
           {user ? (
-            <UserMenu name={user.name} subtitle={user.subtitle} />
+            <UserMenu name={user.name} subtitle={user.subtitle} href={user.href} />
           ) : (
             <span className="text-[12.5px] text-paper-faint">Fattakhov HR Agency</span>
           )}

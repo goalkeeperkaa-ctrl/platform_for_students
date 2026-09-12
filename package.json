@@ -23,7 +23,8 @@
     "smoke": "tsx tests/smoke.ts",
     "db:connect": "node scripts/db-connect.mjs",
     "employer:code": "node --conditions=react-server --import tsx scripts/issue-access-code.ts",
-    "admin:create": "node --conditions=react-server --import tsx scripts/create-admin.ts"
+    "admin:create": "node --conditions=react-server --import tsx scripts/create-admin.ts",
+    "password:set": "node --conditions=react-server --import tsx scripts/set-password.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

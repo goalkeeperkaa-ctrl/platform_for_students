@@ -389,6 +389,50 @@ export async function createMemoryStore(): Promise<DataStore> {
           s.updatedAt = now();
         }
       },
+
+      async update(id, input) {
+        const s = t.students.find((x) => x.id === id);
+        if (!s) throw new Error('Профиль не найден');
+        Object.assign(s, {
+          fullNameEnc: encrypt(input.fullName),
+          // Пустой телефон — отсутствие телефона, а не шифротекст пустой строки
+          phoneEnc: input.phone ? encrypt(input.phone) : null,
+          gender: input.gender,
+          birthYear: input.birthYear,
+          photoUrl: input.photoUrl,
+          resumeUrl: input.resumeUrl,
+          resumeName: input.resumeName,
+          university: input.university,
+          speciality: input.speciality,
+          studyYear: input.studyYear,
+          city: input.city,
+          workDays: [...input.workDays],
+          hoursPerWeek: input.hoursPerWeek,
+          skills: [...input.skills],
+          about: input.about,
+          updatedAt: now(),
+        });
+        return clone(s);
+      },
+
+      async deleteByAccountId(accountId) {
+        const student = t.students.find((x) => x.accountId === accountId);
+        // Каскады в базе делает схема, здесь их приходится повторять руками.
+        // Порядок от листьев к корню: сообщения живут на откликах.
+        if (student) {
+          const applicationIds = t.applications
+            .filter((a) => a.studentId === student.id)
+            .map((a) => a.id);
+          t.messages = t.messages.filter((m) => !applicationIds.includes(m.applicationId));
+          t.applications = t.applications.filter((a) => a.studentId !== student.id);
+          t.swipes = t.swipes.filter((s) => s.studentId !== student.id);
+          t.students = t.students.filter((s) => s.id !== student.id);
+        }
+        t.accounts = t.accounts.filter((a) => a.id !== accountId);
+        // Журнал аудита переживает удаление, как и в базе: запись остаётся,
+        // ссылка на учётную запись обнуляется
+        for (const entry of t.audit) if (entry.accountId === accountId) entry.accountId = null;
+      },
     },
 
     employers: {
