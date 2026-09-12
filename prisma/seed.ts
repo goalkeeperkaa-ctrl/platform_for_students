@@ -4,8 +4,13 @@ import { hashPassword } from '../lib/security/password';
 import {
   CONSENT_VERSION,
   CRM_VACANCIES,
+  DEMO_APPLICATION_FUNNEL,
+  DEMO_CHAT,
   DEMO_CREDENTIALS,
+  DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
+  extraStudentEmail,
+  extraStudentPhone,
 } from '../lib/db/seed-data';
 
 /**
@@ -126,12 +131,134 @@ async function main() {
     consentIp: '127.0.0.1',
   };
 
-  await prisma.student.upsert({
+  const demoStudent = await prisma.student.upsert({
     where: { accountId: studentAccount.id },
     update: profile,
     create: { accountId: studentAccount.id, ...profile },
   });
   console.log(`  студент: ${DEMO_CREDENTIALS.student.email}`);
+
+  // --- Остальные студенты ---
+  // Порядок важен: демо-студент первый, дальше по списку. От него зависит,
+  // какому отклику достанется переписка из DEMO_CHAT.
+  const students = [demoStudent.id];
+
+  for (const [i, extra] of DEMO_EXTRA_STUDENTS.entries()) {
+    const account = await upsertAccountWithPassword(
+      extraStudentEmail(i),
+      DEMO_CREDENTIALS.student.password,
+      'STUDENT',
+    );
+    const data = {
+      ...profile,
+      fullNameEnc: encrypt(extra.fullName),
+      phoneEnc: encrypt(extraStudentPhone(i)),
+      gender: i % 2 === 0 ? ('MALE' as const) : ('FEMALE' as const),
+      birthYear: extra.birthYear,
+      university: extra.university,
+      speciality: extra.speciality,
+      studyYear: 2 + (i % 3),
+      skills: [...extra.skills],
+      about: null,
+      status: extra.status,
+    };
+    const created = await prisma.student.upsert({
+      where: { accountId: account.id },
+      update: data,
+      create: { accountId: account.id, ...data },
+    });
+    students.push(created.id);
+  }
+  console.log(`  всего студентов: ${students.length}`);
+
+  // --- Отклики и пропуски ---
+  // Без них «Отклики», «Пропущенные», кабинет работодателя и статистика
+  // администратора после db:seed оставались пустыми, хотя в демо-режиме
+  // были заполнены. Раскладка повторяет хранилище в памяти один в один.
+  const vacancies = await prisma.vacancy.findMany({
+    where: { crmId: { in: CRM_VACANCIES.map((v) => v.crmId) } },
+    select: { id: true, crmId: true },
+  });
+  const ordered = CRM_VACANCIES.map((v) => vacancies.find((x) => x.crmId === v.crmId)).filter(
+    (v): v is { id: string; crmId: string } => Boolean(v),
+  );
+
+  const applications: string[] = [];
+
+  for (const [idx, studentId] of students.entries()) {
+    const vacancy = ordered[(idx * 3) % ordered.length];
+    if (!vacancy) continue;
+    const createdAt = new Date(Date.now() - (idx + 1) * 3_600_000 * 6);
+    const key = { studentId_vacancyId: { studentId, vacancyId: vacancy.id } };
+
+    await prisma.swipe.upsert({
+      where: key,
+      update: { direction: 'RIGHT' },
+      create: { studentId, vacancyId: vacancy.id, direction: 'RIGHT', createdAt },
+    });
+
+    const status = DEMO_APPLICATION_FUNNEL[idx % DEMO_APPLICATION_FUNNEL.length];
+    const application = await prisma.application.upsert({
+      where: key,
+      update: { status },
+      create: { studentId, vacancyId: vacancy.id, status, statusChangedAt: createdAt, createdAt },
+    });
+    applications.push(application.id);
+
+    // Один пропуск на студента, чтобы раздел «Пропущенные» тоже был живым
+    const skipped = ordered[(idx * 3 + 1) % ordered.length];
+    if (skipped) {
+      await prisma.swipe.upsert({
+        where: { studentId_vacancyId: { studentId, vacancyId: skipped.id } },
+        update: { direction: 'LEFT' },
+        create: {
+          studentId,
+          vacancyId: skipped.id,
+          direction: 'LEFT',
+          createdAt: new Date(createdAt.getTime() + 60_000),
+        },
+      });
+    }
+  }
+  console.log(`  откликов: ${applications.length}`);
+
+  // --- Переписка ---
+  // У сообщений нет естественного ключа, поэтому идемпотентность здесь
+  // другая: в диалог, где уже что-то есть, сид не лезет.
+  // Проверка одна на диалог, а не на строку: иначе первое же записанное
+  // сообщение отсекало бы остальные реплики того же разговора.
+  const byApplication = new Map<string, typeof DEMO_CHAT>();
+  for (const line of DEMO_CHAT) {
+    const applicationId = applications[line.applicationIndex];
+    if (!applicationId) continue;
+    byApplication.set(applicationId, [...(byApplication.get(applicationId) ?? []), line]);
+  }
+
+  let written = 0;
+  for (const [applicationId, lines] of byApplication) {
+    if (await prisma.message.count({ where: { applicationId } })) continue;
+
+    let last: Date | null = null;
+    for (const line of lines) {
+      const createdAt = new Date(Date.now() - line.minutesAgo * 60_000);
+      await prisma.message.create({
+        data: {
+          applicationId,
+          author: line.author,
+          bodyEnc: encrypt(line.body),
+          readAt: line.read ? new Date(createdAt.getTime() + 90_000) : null,
+          createdAt,
+        },
+      });
+      if (!last || last < createdAt) last = createdAt;
+      written++;
+    }
+    await prisma.application.update({
+      where: { id: applicationId },
+      data: { lastMessageAt: last },
+    });
+  }
+  console.log(`  сообщений: ${written}`);
 
   console.log('Готово.');
 }

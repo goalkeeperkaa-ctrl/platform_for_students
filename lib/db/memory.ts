@@ -6,8 +6,13 @@ import type { ApplicationStatus, StudentStatus, SwipeDirection } from '@/lib/typ
 import {
   CONSENT_VERSION,
   CRM_VACANCIES,
+  DEMO_APPLICATION_FUNNEL,
+  DEMO_CHAT,
   DEMO_CREDENTIALS,
+  DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
+  extraStudentEmail,
+  extraStudentPhone,
 } from './seed-data';
 import type {
   AccessCodeRecord,
@@ -168,22 +173,8 @@ async function seed(): Promise<Tables> {
 
   // --- Ещё несколько студентов, чтобы кабинет работодателя и статистика
   //     не выглядели пустыми ---
-  const extras: Array<[string, string, string, StudentStatus, number]> = [
-    ['Марк Гурьев', 'МГТУ им. Баумана', 'Информатика и вычислительная техника', 'ACTIVE', 2004],
-    ['Дарья Пшеничная', 'РЭУ им. Плеханова', 'Маркетинг', 'IN_PROGRESS', 2005],
-    ['Тимур Насыров', 'МФТИ', 'Прикладная математика', 'PLACED', 2003],
-    ['Ева Логинова', 'РГГУ', 'Журналистика', 'ACTIVE', 2006],
-    ['Артём Соболев', 'МИСиС', 'Материаловедение', 'PAUSED', 2004],
-  ];
-  const extraSkills = [
-    ['Python', 'SQL', 'Английский B2'],
-    ['SMM', 'Excel', 'Копирайтинг'],
-    ['SQL', 'Python', 'Статистика'],
-    ['Копирайтинг', 'Английский B2', 'Видео'],
-    ['Excel', 'Химия', 'Лаборатория'],
-  ];
-  for (const [i, [fullName, university, speciality, status, birthYear]] of extras.entries()) {
-    const email = `student${i + 2}@demo.ru`;
+  for (const [i, extra] of DEMO_EXTRA_STUDENTS.entries()) {
+    const email = extraStudentEmail(i);
     const acc: AccountRecord = {
       id: randomUUID(),
       role: 'STUDENT',
@@ -199,22 +190,22 @@ async function seed(): Promise<Tables> {
       ...student,
       id: randomUUID(),
       accountId: acc.id,
-      fullNameEnc: encrypt(fullName),
-      phoneEnc: encrypt(`+7 9${10 + i}5 ${100 + i}-22-3${i}`),
+      fullNameEnc: encrypt(extra.fullName),
+      phoneEnc: encrypt(extraStudentPhone(i)),
       gender: i % 2 === 0 ? 'MALE' : 'FEMALE',
-      birthYear,
-      university,
-      speciality,
+      birthYear: extra.birthYear,
+      university: extra.university,
+      speciality: extra.speciality,
       studyYear: 2 + (i % 3),
-      skills: extraSkills[i] ?? [],
-      status,
+      skills: [...extra.skills],
+      status: extra.status,
       about: null,
       createdAt: new Date(Date.now() - (3 + i * 4) * 86_400_000),
     });
   }
 
   // --- Немного истории: отклики уже есть, воронка не пустая ---
-  const funnel: ApplicationStatus[] = ['INVITED', 'VIEWED', 'INVITED', 'INTERVIEW', 'HIRED', 'NEW'];
+  const funnel = DEMO_APPLICATION_FUNNEL;
   const seededApplications: ApplicationRecord[] = [];
   t.students.forEach((s, idx) => {
     const vacancy = t.vacancies[(idx * 3) % t.vacancies.length];
@@ -269,15 +260,9 @@ async function seed(): Promise<Tables> {
     if (app && (!app.lastMessageAt || app.lastMessageAt < createdAt)) app.lastMessageAt = createdAt;
   }
 
-  const chatA = seededApplications[0];
-  if (chatA) {
-    seedMessage(chatA.id, 'EMPLOYER', 'Здравствуйте, Алиса! Посмотрели ваш профиль — график подходит под наши утренние смены. Когда удобно созвониться минут на десять?', 180, true);
-    seedMessage(chatA.id, 'STUDENT', 'Добрый день! Спасибо. Удобно в будни после 17:00 или в субботу днём.', 165, true);
-    seedMessage(chatA.id, 'EMPLOYER', 'Отлично, давайте в четверг в 18:00 — позвоню на номер из профиля. Медкнижку поможем оформить, приносить ничего не нужно.', 24, false);
-  }
-  const chatB = seededApplications[2];
-  if (chatB) {
-    seedMessage(chatB.id, 'EMPLOYER', 'Добрый день! Готовы пригласить вас на смену-стажировку в эту субботу. Подходит?', 900, false);
+  for (const line of DEMO_CHAT) {
+    const application = seededApplications[line.applicationIndex];
+    if (application) seedMessage(application.id, line.author, line.body, line.minutesAgo, line.read);
   }
 
   t.syncRuns.push({

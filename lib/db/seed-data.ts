@@ -490,3 +490,111 @@ export const DEMO_STUDENT_PROFILE = {
 };
 
 export const CONSENT_VERSION = '2026-01-15';
+
+/**
+ * Остальные студенты, отклики и переписка.
+ *
+ * Лежат здесь, а не внутри хранилища в памяти, по той же причине, что и
+ * вакансии выше: пока эти фикстуры знало только демо-хранилище, база
+ * после `db:seed` получала работодателей и вакансии, но ни одного
+ * отклика. На демо-режиме разделы «Отклики», «Пропущенные» и
+ * «Сообщения» были живыми, а на настоящей базе — пустыми, и разница
+ * обнаруживалась только после переключения на PostgreSQL.
+ */
+export const DEMO_EXTRA_STUDENTS = [
+  {
+    fullName: 'Марк Гурьев',
+    university: 'МГТУ им. Баумана',
+    speciality: 'Информатика и вычислительная техника',
+    status: 'ACTIVE' as const,
+    birthYear: 2004,
+    skills: ['Python', 'SQL', 'Английский B2'],
+  },
+  {
+    fullName: 'Дарья Пшеничная',
+    university: 'РЭУ им. Плеханова',
+    speciality: 'Маркетинг',
+    status: 'IN_PROGRESS' as const,
+    birthYear: 2005,
+    skills: ['SMM', 'Excel', 'Копирайтинг'],
+  },
+  {
+    fullName: 'Тимур Насыров',
+    university: 'МФТИ',
+    speciality: 'Прикладная математика',
+    status: 'PLACED' as const,
+    birthYear: 2003,
+    skills: ['SQL', 'Python', 'Статистика'],
+  },
+  {
+    fullName: 'Ева Логинова',
+    university: 'РГГУ',
+    speciality: 'Журналистика',
+    status: 'ACTIVE' as const,
+    birthYear: 2006,
+    skills: ['Копирайтинг', 'Английский B2', 'Видео'],
+  },
+  {
+    fullName: 'Артём Соболев',
+    university: 'МИСиС',
+    speciality: 'Материаловедение',
+    status: 'PAUSED' as const,
+    birthYear: 2004,
+    skills: ['Excel', 'Химия', 'Лаборатория'],
+  },
+];
+
+/** Почта и телефон i-го дополнительного студента — одинаково в обоих хранилищах. */
+export const extraStudentEmail = (i: number) => `student${i + 2}@demo.ru`;
+export const extraStudentPhone = (i: number) => `+7 9${10 + i}5 ${100 + i}-22-3${i}`;
+
+/**
+ * Статусы откликов по кругу: воронка работодателя и статистика админа
+ * должны показывать разные этапы, а не колонку одинаковых «новых».
+ */
+export const DEMO_APPLICATION_FUNNEL = [
+  'INVITED',
+  'VIEWED',
+  'INVITED',
+  'INTERVIEW',
+  'HIRED',
+  'NEW',
+] as const;
+
+/**
+ * Переписка. Диалог всегда открывает работодатель: пока он не отреагировал
+ * на отклик, письмо студента было бы монологом в пустоту.
+ *
+ * `applicationIndex` — позиция отклика в том же порядке, в каком они
+ * создаются, `minutesAgo` — давность, `read` — прочитано ли.
+ */
+export const DEMO_CHAT = [
+  {
+    applicationIndex: 0,
+    author: 'EMPLOYER' as const,
+    body: 'Здравствуйте, Алиса! Посмотрели ваш профиль — график подходит под наши утренние смены. Когда удобно созвониться минут на десять?',
+    minutesAgo: 180,
+    read: true,
+  },
+  {
+    applicationIndex: 0,
+    author: 'STUDENT' as const,
+    body: 'Добрый день! Спасибо. Удобно в будни после 17:00 или в субботу днём.',
+    minutesAgo: 165,
+    read: true,
+  },
+  {
+    applicationIndex: 0,
+    author: 'EMPLOYER' as const,
+    body: 'Отлично, давайте в четверг в 18:00 — позвоню на номер из профиля. Медкнижку поможем оформить, приносить ничего не нужно.',
+    minutesAgo: 24,
+    read: false,
+  },
+  {
+    applicationIndex: 2,
+    author: 'EMPLOYER' as const,
+    body: 'Добрый день! Готовы пригласить вас на смену-стажировку в эту субботу. Подходит?',
+    minutesAgo: 900,
+    read: false,
+  },
+];
