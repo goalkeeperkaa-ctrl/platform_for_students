@@ -1,0 +1,33 @@
+# Обратный прокси и автоматический TLS.
+#
+# Адрес берётся из SITE_DOMAIN в deploy/.env — он ещё не выбран, и
+# вписывать его сюда строкой значило бы править конфиг при каждом
+# решении. Сертификат Let's Encrypt выпускается и продлевается сам,
+# как только DNS-запись домена указывает на этот сервер.
+
+{
+  email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+  encode zstd gzip
+
+  header {
+    # Строгий транспорт: первый запрос по HTTP иначе можно перехватить
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    -Server
+  }
+
+  reverse_proxy app:3000 {
+    # Живая переписка идёт через Server-Sent Events. С буферизацией
+    # сообщения приходят пачками с задержкой или не приходят вовсе
+    flush_interval -1
+  }
+
+  # X-Forwarded-For Caddy выставляет сам и чужой, пришедший от клиента,
+  # не пропускает: клиент не входит в доверенные прокси. На этом
+  # держатся лимиты запросов и IP в журнале аудита.
+}

@@ -1,0 +1,99 @@
+# Боевой состав платформы для студентов на одном сервере.
+#
+# Запуск из корня проекта:
+#
+#   cp deploy/.env.example deploy/.env      # и заполнить
+#   docker compose -f deploy/docker-compose.yml --profile db up -d --build
+#
+# `--profile db` поднимает свой PostgreSQL в контейнере — для отдельного
+# сервера. С управляемой базой (Яндекс Облако и т. п.) профиль не
+# указывают, а DATABASE_URL и DIRECT_DATABASE_URL в deploy/.env
+# ведут на неё.
+#
+# Секреты приходят только из deploy/.env, он в git не попадает.
+
+name: fhr-students
+
+services:
+  # Своя база — только при --profile db
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["db"]
+    restart: always
+    environment:
+      POSTGRES_DB: fhr_students
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?задайте POSTGRES_ADMIN_PASSWORD в deploy/.env}
+      # Пароль роли приложения: скрипт в deploy/postgres заводит её при
+      # первом запуске на пустом томе
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?задайте APP_DB_PASSWORD в deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    # Порт наружу не открыт: база видна только контейнерам этой сети.
+    # Открытый 5432 — первое, что находят сканеры
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fhr_students"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Миграции — до старта приложения, один раз, и завершаются.
+  # Отдельным шагом: два экземпляра приложения, стартующие вместе,
+  # попытались бы мигрировать базу вдвоём.
+  migrate:
+    build:
+      context: ..
+      target: tools
+    image: fhr-students-tools
+    restart: "no"
+    env_file: .env
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+        # С управляемой базой контейнера postgres нет, и ждать нечего
+        required: false
+
+  app:
+    build:
+      context: ..
+      target: runner
+    image: fhr-students-app
+    restart: always
+    env_file: .env
+    # Порт не публикуется: снаружи к приложению ходит только Caddy.
+    # Иначе заголовок X-Forwarded-For можно было бы подделать в обход
+    # прокси, и лимиты запросов считали бы не того клиента
+    expose:
+      - "3000"
+    volumes:
+      # Фото и резюме переживают пересборку и перезапуск
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    # Только адрес и почта для сертификатов — остальные секреты прокси не нужны
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?задайте SITE_DOMAIN в deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?задайте ACME_EMAIL в deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

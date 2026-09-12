@@ -67,6 +67,11 @@ function warn(title, why) {
 }
 
 function env(key) {
+  // Сначала окружение, потом .env. В контейнере файла нет — переменные
+  // приходят окружением из deploy/.env; читай скрипт только файл, на
+  // сервере он сообщал бы «DATABASE_URL не задан» при работающей базе.
+  const fromProcess = process.env[key]?.trim();
+  if (fromProcess) return fromProcess;
   const file = path.resolve(process.cwd(), '.env');
   if (!fs.existsSync(file)) return undefined;
   return fs
