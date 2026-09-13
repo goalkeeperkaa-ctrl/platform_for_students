@@ -16,6 +16,69 @@ export type Gender = (typeof GENDERS)[number];
 export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
+/** Что студент ищет. Сразу несколько: стажировка не исключает подработку. */
+export const LOOKING_FOR = ['JOB', 'INTERNSHIP', 'PROJECT'] as const;
+export type LookingFor = (typeof LOOKING_FOR)[number];
+export const LOOKING_FOR_LABEL: Record<LookingFor, string> = {
+  JOB: 'Работа',
+  INTERNSHIP: 'Стажировка',
+  PROJECT: 'Проект',
+};
+
+/**
+ * Виды занятий вне учёбы — три группы с доски Miro. Разделены, потому что
+ * работодатель читает их по-разному: спорт говорит о дисциплине, доп.
+ * обучение — об интересе, активность в вузе — об инициативе.
+ */
+export const ACTIVITY_KINDS = ['SPORT', 'EDUCATION', 'COMMUNITY'] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+export const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
+  SPORT: 'Спорт и долгие занятия',
+  EDUCATION: 'Доп. обучение: школы, языки, кружки',
+  COMMUNITY: 'Активность в учёбе: староста, волонтёр, клубы',
+};
+
+export interface ProjectItem {
+  title: string;
+  description: string | null;
+  link: string | null;
+}
+
+export interface AchievementItem {
+  title: string;
+  description: string | null;
+  year: number | null;
+}
+
+export interface ActivityItem {
+  kind: ActivityKind;
+  title: string;
+  description: string | null;
+}
+
+export interface LinkItem {
+  label: string;
+  url: string;
+}
+
+/**
+ * Портфолио студента — то, что показывает человека шире резюме.
+ *
+ * Участие здесь тоже опыт: не только «победил», но и «делал, пробовал,
+ * организовывал». Поэтому достижения и занятия — отдельные блоки, а не
+ * одна строка «опыт работы», которой у студента обычно нет.
+ */
+export interface StudentPortfolio {
+  lookingFor: LookingFor[];
+  goals: string | null;
+  projects: ProjectItem[];
+  achievements: AchievementItem[];
+  activities: ActivityItem[];
+  hobbies: string | null;
+  links: LinkItem[];
+  videoUrl: string | null;
+}
+
 export const WEEKDAY_LABEL: Record<Weekday, string> = {
   MON: 'Пн',
   TUE: 'Вт',
@@ -121,7 +184,7 @@ export interface VacancyDTO {
   matchReasons: string[];
 }
 
-export interface StudentProfileDTO {
+export interface StudentProfileDTO extends StudentPortfolio {
   id: string;
   fullName: string;
   email: string;

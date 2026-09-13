@@ -51,6 +51,12 @@ enum Weekday {
   SUN
 }
 
+enum LookingFor {
+  JOB
+  INTERNSHIP
+  PROJECT
+}
+
 enum WorkFormat {
   ONSITE
   HYBRID
@@ -148,6 +154,18 @@ model Student {
   hoursPerWeek Int?
   skills       String[]  @default([])
   about        String?   @db.Text
+
+  // Портфолио. Списки — JSON: у элементов своя форма (название, описание,
+  // ссылка), а искать по ним базой не нужно. Форма проверяется в
+  // lib/portfolio.ts и при записи, и при чтении.
+  lookingFor   LookingFor[] @default([])
+  goals        String?      @db.Text
+  projects     Json         @default("[]")
+  achievements Json         @default("[]")
+  activities   Json         @default("[]")
+  hobbies      String?      @db.Text
+  links        Json         @default("[]")
+  videoUrl     String?
 
   status StudentStatus @default(ACTIVE)
 

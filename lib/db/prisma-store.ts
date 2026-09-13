@@ -2,9 +2,26 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { blindIndex, encrypt } from '@/lib/security/crypto';
 import { hashPassword } from '@/lib/security/password';
+import { readPortfolio } from '@/lib/portfolio';
 import { prisma } from './prisma-client';
 import { AccountExistsError } from './memory';
 import type { CrmVacancyInput, DataStore, MessageRecord, SyncOutcome } from './types';
+
+/**
+ * Студент из строки базы.
+ *
+ * Портфолио лежит в JSON, и Prisma отдаёт его как произвольное значение.
+ * Здесь оно приводится к форме, которую ждёт остальной код: без этого
+ * одна поправленная руками строка роняла бы кабинет работодателя.
+ */
+function toStudentRecord<T extends Parameters<typeof readPortfolio>[0]>(row: T) {
+  return { ...row, ...readPortfolio(row) };
+}
+
+/** Значение для JSON-колонки; undefined оставляет колонку как есть. */
+function json(value: unknown): Prisma.InputJsonValue | undefined {
+  return value === undefined ? undefined : (value as Prisma.InputJsonValue);
+}
 
 /**
  * Боевое хранилище поверх PostgreSQL.
@@ -55,6 +72,7 @@ export function createPrismaStore(): DataStore {
                   hoursPerWeek: input.hoursPerWeek,
                   skills: input.skills,
                   about: input.about,
+                  lookingFor: input.lookingFor,
                   consentVersion: input.consentVersion,
                   consentIp: input.consentIp,
                 },
@@ -64,7 +82,7 @@ export function createPrismaStore(): DataStore {
           });
           const { student, ...rest } = account;
           if (!student) throw new Error('Профиль студента не создан');
-          return { account: rest, student };
+          return { account: rest, student: toStudentRecord(student) };
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
             throw new AccountExistsError();
@@ -72,15 +90,24 @@ export function createPrismaStore(): DataStore {
           throw err;
         }
       },
-      findByAccountId: (accountId) => prisma.student.findUnique({ where: { accountId } }),
-      findById: (id) => prisma.student.findUnique({ where: { id } }),
-      list: () => prisma.student.findMany({ orderBy: { createdAt: 'desc' } }),
+      async findByAccountId(accountId) {
+        const row = await prisma.student.findUnique({ where: { accountId } });
+        return row ? toStudentRecord(row) : null;
+      },
+      async findById(id) {
+        const row = await prisma.student.findUnique({ where: { id } });
+        return row ? toStudentRecord(row) : null;
+      },
+      async list() {
+        const rows = await prisma.student.findMany({ orderBy: { createdAt: 'desc' } });
+        return rows.map(toStudentRecord);
+      },
       async setStatus(id, status) {
         await prisma.student.update({ where: { id }, data: { status } });
       },
 
-      update(id, input) {
-        return prisma.student.update({
+      async update(id, input) {
+        const row = await prisma.student.update({
           where: { id },
           data: {
             fullNameEnc: encrypt(input.fullName),
@@ -101,8 +128,18 @@ export function createPrismaStore(): DataStore {
             hoursPerWeek: input.hoursPerWeek,
             skills: input.skills,
             about: input.about,
+            // Портфолио: undefined — «не менять», Prisma такие поля пропускает
+            lookingFor: input.lookingFor,
+            goals: input.goals,
+            projects: json(input.projects),
+            achievements: json(input.achievements),
+            activities: json(input.activities),
+            hobbies: input.hobbies,
+            links: json(input.links),
+            videoUrl: input.videoUrl,
           },
         });
+        return toStudentRecord(row);
       },
 
       async deleteByAccountId(accountId) {

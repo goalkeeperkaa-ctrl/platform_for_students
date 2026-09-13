@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { blindIndex, encrypt, hashToken } from '@/lib/security/crypto';
+import { EMPTY_PORTFOLIO } from '@/lib/portfolio';
 import { hashPassword } from '@/lib/security/password';
 import type { ApplicationStatus, StudentStatus, SwipeDirection } from '@/lib/types';
 import {
@@ -162,6 +163,14 @@ async function seed(): Promise<Tables> {
     hoursPerWeek: DEMO_STUDENT_PROFILE.hoursPerWeek,
     skills: [...DEMO_STUDENT_PROFILE.skills],
     about: DEMO_STUDENT_PROFILE.about,
+    lookingFor: [...DEMO_STUDENT_PROFILE.lookingFor],
+    goals: DEMO_STUDENT_PROFILE.goals,
+    projects: structuredClone(DEMO_STUDENT_PROFILE.projects),
+    achievements: structuredClone(DEMO_STUDENT_PROFILE.achievements),
+    activities: structuredClone(DEMO_STUDENT_PROFILE.activities),
+    hobbies: DEMO_STUDENT_PROFILE.hobbies,
+    links: structuredClone(DEMO_STUDENT_PROFILE.links),
+    videoUrl: DEMO_STUDENT_PROFILE.videoUrl,
     status: 'IN_PROGRESS',
     consentVersion: CONSENT_VERSION,
     consentAt: now(),
@@ -200,6 +209,8 @@ async function seed(): Promise<Tables> {
       skills: [...extra.skills],
       status: extra.status,
       about: null,
+      // Без этого все получили бы портфолио демо-студента через ...student
+      ...structuredClone(EMPTY_PORTFOLIO),
       createdAt: new Date(Date.now() - (3 + i * 4) * 86_400_000),
     });
   }
@@ -362,6 +373,8 @@ export async function createMemoryStore(): Promise<DataStore> {
           hoursPerWeek: input.hoursPerWeek,
           skills: input.skills,
           about: input.about,
+          ...structuredClone(EMPTY_PORTFOLIO),
+          lookingFor: [...input.lookingFor],
           status: 'ACTIVE',
           consentVersion: input.consentVersion,
           consentAt: now(),
@@ -412,6 +425,16 @@ export async function createMemoryStore(): Promise<DataStore> {
           about: input.about,
           updatedAt: now(),
         });
+        // Портфолио частично, как и в базе: undefined — «не менять».
+        // Object.assign выше записал бы undefined поверх значения.
+        const portfolioKeys = [
+          'lookingFor', 'goals', 'projects', 'achievements',
+          'activities', 'hobbies', 'links', 'videoUrl',
+        ] as const;
+        for (const key of portfolioKeys) {
+          const value = input[key];
+          if (value !== undefined) Object.assign(s, { [key]: structuredClone(value) });
+        }
         return clone(s);
       },
 

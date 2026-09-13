@@ -2,8 +2,10 @@ import type {
   ApplicationStatus,
   EmploymentType,
   Gender,
+  LookingFor,
   MessageAuthor,
   Role,
+  StudentPortfolio,
   StudentStatus,
   SwipeDirection,
   SyncStatus,
@@ -29,7 +31,7 @@ export interface AccountRecord {
   createdAt: Date;
 }
 
-export interface StudentRecord {
+export interface StudentRecord extends StudentPortfolio {
   id: string;
   accountId: string;
   fullNameEnc: string;
@@ -170,8 +172,10 @@ export interface AuditRecord {
  *
  * Согласия на ПДн тоже нет: это юридический факт с датой и версией,
  * а не поле анкеты. Передумал — удаляй профиль.
+ *
+ * Портфолио — частично: не переданное поле не меняется, а не стирается.
  */
-export interface StudentProfileUpdate {
+export interface StudentProfileUpdate extends Partial<StudentPortfolio> {
   fullName: string;
   phone: string | null;
   gender: Gender;
@@ -207,6 +211,7 @@ export interface NewStudentInput {
   hoursPerWeek: number | null;
   skills: string[];
   about: string | null;
+  lookingFor: LookingFor[];
   consentVersion: string;
   consentIp: string | null;
 }

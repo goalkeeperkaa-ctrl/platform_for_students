@@ -216,6 +216,11 @@ async function main() {
     !!application && typeof application.student.fullName === 'string' && application.student.fullName.length > 2,
     application?.student?.fullName,
   );
+  check(
+    'портфолио передаётся работодателю',
+    !!application && Array.isArray(application.student.projects) && Array.isArray(application.student.lookingFor),
+    application && Object.keys(application.student),
+  );
 
   if (application) {
     const statusChange = await employer.patch('/api/employer/applications', {
@@ -462,6 +467,15 @@ async function main() {
   });
   check('студент для проверки профиля заведён', ownerCreated.status === 201, ownerCreated.body);
 
+  const minor = await new Session().post('/api/auth/register', {
+    ...ownerProfile,
+    birthYear: new Date().getFullYear() - 17,
+    email: `smoke-minor-${Date.now()}@demo.ru`,
+    password: 'Smoke12345!',
+    consent: true,
+  });
+  check('младше 18 регистрацию не проходит', minor.status === 400, minor.status);
+
   check('страница профиля открывается студенту', (await owner.request('/profile')).status === 200);
   const guestProfile = await new Session().request('/profile');
   check('гостя со страницы профиля уводят на вход', guestProfile.status === 307, guestProfile.status);
@@ -484,6 +498,46 @@ async function main() {
 
   const invalid = await owner.patch('/api/students/me', { ...ownerProfile, studyYear: 9 });
   check('кривые данные профиля отвергнуты', invalid.status === 400, invalid.status);
+
+  const portfolio = {
+    lookingFor: ['JOB', 'PROJECT'],
+    goals: 'Хочу в продуктовую аналитику',
+    projects: [{ title: 'Бот расписания для группы', description: 'Telegram-бот', link: 'https://example.org/bot' }],
+    achievements: [{ title: 'Призёр студенческого хакатона', description: null, year: 2025 }],
+    activities: [{ kind: 'SPORT', title: 'Плавание, 8 лет', description: null }],
+    hobbies: 'Шахматы',
+    links: [{ label: 'GitHub', url: 'https://example.org/gh' }],
+    videoUrl: 'https://example.org/video',
+  };
+  const withPortfolio = await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', ...portfolio });
+  check('портфолио сохраняется', withPortfolio.status === 200, withPortfolio.body);
+  const profilePage = await owner.request('/profile');
+  check('портфолио видно в профиле', String(profilePage.body).includes('Бот расписания для группы'), profilePage.status);
+
+  for (const [label, bad] of [
+    ['ссылка javascript: отвергнута', { links: [{ label: 'x', url: 'javascript:alert(1)' }] }],
+    ['видео javascript: отвергнуто', { videoUrl: 'javascript:alert(1)' }],
+    ['ссылка проекта data: отвергнута', { projects: [{ title: 'Проект', description: null, link: 'data:text/html,<script>alert(1)</script>' }] }],
+  ] as const) {
+    const res = await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', ...bad });
+    check(label, res.status === 400, res.status);
+  }
+
+  const tooMany = await owner.patch('/api/students/me', {
+    ...ownerProfile,
+    fullName: 'Профиль Изменённый',
+    projects: Array.from({ length: 11 }, (_, i) => ({ title: `Проект ${i + 1}`, description: null, link: null })),
+  });
+  check('больше 10 проектов не принимается', tooMany.status === 400, tooMany.status);
+
+  // Изменение без полей портфолио — например, старым клиентом — не должно его стирать
+  const partial = await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', city: 'Москва' });
+  const afterPartial = await owner.request('/profile');
+  check(
+    'частичное изменение не стирает портфолио',
+    partial.status === 200 && String(afterPartial.body).includes('Бот расписания для группы'),
+    partial.status,
+  );
 
   const erased = await owner.delete('/api/students/me', {});
   check('профиль удаляется', erased.status === 200, erased.body);

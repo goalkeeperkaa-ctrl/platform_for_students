@@ -37,6 +37,14 @@ export default async function ProfilePage() {
         hoursPerWeek: student.hoursPerWeek,
         skills: student.skills,
         about: student.about ?? '',
+        lookingFor: student.lookingFor,
+        goals: student.goals ?? '',
+        projects: student.projects,
+        achievements: student.achievements,
+        activities: student.activities,
+        hobbies: student.hobbies ?? '',
+        links: student.links,
+        videoUrl: student.videoUrl ?? '',
       }}
     />
   );

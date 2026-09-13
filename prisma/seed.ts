@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { blindIndex, encrypt, hashToken } from '../lib/security/crypto';
 import { hashPassword } from '../lib/security/password';
 import {
@@ -23,6 +23,9 @@ import {
  * Идемпотентно: повторный запуск обновляет, а не дублирует.
  */
 const prisma = new PrismaClient();
+
+/** Портфолио — JSON-колонки; интерфейсы TypeScript Prisma принимает только приведёнными. */
+const asJson = (value: unknown) => value as Prisma.InputJsonValue;
 
 async function main() {
   console.log('Заполняем базу…');
@@ -127,6 +130,14 @@ async function main() {
     hoursPerWeek: DEMO_STUDENT_PROFILE.hoursPerWeek,
     skills: [...DEMO_STUDENT_PROFILE.skills],
     about: DEMO_STUDENT_PROFILE.about,
+    lookingFor: [...DEMO_STUDENT_PROFILE.lookingFor],
+    goals: DEMO_STUDENT_PROFILE.goals,
+    projects: asJson(DEMO_STUDENT_PROFILE.projects),
+    achievements: asJson(DEMO_STUDENT_PROFILE.achievements),
+    activities: asJson(DEMO_STUDENT_PROFILE.activities),
+    hobbies: DEMO_STUDENT_PROFILE.hobbies,
+    links: asJson(DEMO_STUDENT_PROFILE.links),
+    videoUrl: DEMO_STUDENT_PROFILE.videoUrl,
     consentVersion: CONSENT_VERSION,
     consentIp: '127.0.0.1',
   };
@@ -160,6 +171,16 @@ async function main() {
       studyYear: 2 + (i % 3),
       skills: [...extra.skills],
       about: null,
+      // Портфолио своё, пустое: иначе через ...profile всем досталось бы
+      // портфолио демо-студента
+      lookingFor: [],
+      goals: null,
+      projects: asJson([]),
+      achievements: asJson([]),
+      activities: asJson([]),
+      hobbies: null,
+      links: asJson([]),
+      videoUrl: null,
       status: extra.status,
     };
     const created = await prisma.student.upsert({

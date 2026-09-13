@@ -40,6 +40,7 @@ export async function POST(request: Request) {
         hoursPerWeek: input.hoursPerWeek,
         skills: input.skills,
         about: input.about,
+        lookingFor: input.lookingFor,
         consentVersion: CONSENT_VERSION,
         consentIp: ip,
       });

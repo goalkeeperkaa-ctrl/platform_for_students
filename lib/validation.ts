@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { lookingForSchema, portfolioSchema } from '@/lib/portfolio';
 import {
   APPLICATION_STATUSES,
   GENDERS,
@@ -58,7 +59,10 @@ export const registrationSteps = {
       .number({ invalid_type_error: 'Укажите год рождения' })
       .int()
       .min(CURRENT_YEAR - 60, 'Проверьте год')
-      .max(CURRENT_YEAR - 14, 'Платформа для студентов от 14 лет'),
+      // С 18 лет до решения юриста: согласие на обработку ПДн
+      // несовершеннолетнего даёт законный представитель, а механизма для
+      // этого на платформе нет
+      .max(CURRENT_YEAR - 18, 'Регистрация — с 18 лет'),
   }),
   photo: z.object({
     photoUrl: z.string().max(500).nullable(),
@@ -75,6 +79,7 @@ export const registrationSteps = {
   }),
   skills: z.object({
     skills: z.array(z.string().trim().min(1).max(40)).max(20, 'Не больше 20 навыков'),
+    lookingFor: lookingForSchema.default([]),
     about: z.string().trim().max(600, 'Не длиннее 600 символов').nullable(),
     resumeUrl: z.string().max(500).nullable(),
     resumeName: z.string().max(200).nullable(),
@@ -116,7 +121,9 @@ export const profileUpdateSchema = registrationSteps.identity
   .merge(registrationSteps.education)
   .merge(registrationSteps.schedule)
   .merge(registrationSteps.skills)
-  .extend({ phone: phoneSchema });
+  .extend({ phone: phoneSchema })
+  // Портфолио частично: поле, которого нет в запросе, не меняется
+  .merge(portfolioSchema.partial());
 
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 

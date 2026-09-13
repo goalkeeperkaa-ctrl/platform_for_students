@@ -1,5 +1,6 @@
 'use client';
 
+import { PortfolioView } from '@/components/student/PortfolioView';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
@@ -365,6 +366,12 @@ function CandidateRow({
                   <p className="mt-2 text-[14px] leading-relaxed text-paper-dim">{student.about}</p>
                 </div>
               )}
+
+              {/* Портфолио — то, ради чего здесь больше, чем резюме: проекты,
+                  достижения, занятия. Пустые блоки компонент не выводит */}
+              <div className="mt-5 border-t border-[var(--hairline)] pt-5 empty:hidden">
+                <PortfolioView portfolio={student} />
+              </div>
 
               {/* Переход в переписку прямо отсюда: решение «позвать»
                   принимается на карточке кандидата, а не в другом разделе */}

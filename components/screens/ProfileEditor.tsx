@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
+import { Check, Plus, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { SelectField, TextAreaField, TextField } from '@/components/ui/Field';
@@ -12,11 +12,30 @@ import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { SkillsInput } from '@/components/forms/SkillsInput';
 import { durations, easeOutExpo } from '@/lib/motion';
+import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import { profileUpdateSchema } from '@/lib/validation';
-import { GENDERS, WEEKDAYS, WEEKDAY_LABEL, type Gender, type Weekday } from '@/lib/types';
+import {
+  ACTIVITY_KINDS,
+  ACTIVITY_KIND_LABEL,
+  GENDERS,
+  LOOKING_FOR,
+  LOOKING_FOR_LABEL,
+  WEEKDAYS,
+  WEEKDAY_LABEL,
+  type AchievementItem,
+  type ActivityItem,
+  type Gender,
+  type LinkItem,
+  type LookingFor,
+  type ProjectItem,
+  type Weekday,
+} from '@/lib/types';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const HOURS_OPTIONS = [8, 12, 16, 20, 24, 30, 40];
+
+/** Те же пределы, что в lib/portfolio.ts: кнопка «Добавить» гаснет раньше, чем сервер откажет. */
+const LIMITS = { projects: 10, achievements: 15, activities: 10, links: 10 } as const;
 
 const GENDER_LABEL: Record<Gender, string> = {
   FEMALE: 'Женский',
@@ -40,10 +59,26 @@ export interface ProfileFormState {
   hoursPerWeek: number | null;
   skills: string[];
   about: string;
+  lookingFor: LookingFor[];
+  goals: string;
+  projects: ProjectItem[];
+  achievements: AchievementItem[];
+  activities: ActivityItem[];
+  hobbies: string;
+  links: LinkItem[];
+  videoUrl: string;
+}
+
+function replaceAt<T>(list: T[], index: number, change: Partial<T>): T[] {
+  return list.map((item, i) => (i === index ? { ...item, ...change } : item));
+}
+
+function removeAt<T>(list: T[], index: number): T[] {
+  return list.filter((_, i) => i !== index);
 }
 
 /**
- * Свой профиль.
+ * Свой профиль-портфолио.
  *
  * Одной страницей, а не мастером из шести шагов: мастер ведёт человека,
  * который ещё не знает, что у него спросят. Здесь он знает и пришёл
@@ -53,6 +88,10 @@ export interface ProfileFormState {
  * Кнопка сохранения появляется, только когда есть что сохранять. Форма
  * с вечно активной кнопкой не даёт понять, изменилось ли что-нибудь
  * вообще, и человек жмёт её на всякий случай.
+ *
+ * Заполненность считается на лету из того, что на экране, а не из
+ * сохранённого: иначе процент стоял бы на месте, пока человек добавляет
+ * проект, и подсказка «чего не хватает» врала бы до сохранения.
  */
 export function ProfileEditor({
   initial,
@@ -73,12 +112,30 @@ export function ProfileEditor({
 
   const dirty = JSON.stringify(form) !== JSON.stringify(saved);
 
+  const completeness = useMemo(
+    () =>
+      profileCompleteness({
+        ...form,
+        about: form.about || null,
+        goals: form.goals || null,
+        hobbies: form.hobbies || null,
+        videoUrl: form.videoUrl || null,
+      }),
+    [form],
+  );
+
   function patch(values: Partial<ProfileFormState>) {
     setForm((current) => ({ ...current, ...values }));
+    // Ошибка снимается при первом же исправлении. У списков ошибки лежат
+    // под ключами вида «projects.0.title» — снимаем и их вместе со списком
     setErrors((current) => {
       if (Object.keys(current).length === 0) return current;
       const next = { ...current };
-      for (const key of Object.keys(values)) delete next[key];
+      for (const key of Object.keys(values)) {
+        for (const errorKey of Object.keys(next)) {
+          if (errorKey === key || errorKey.startsWith(`${key}.`)) delete next[errorKey];
+        }
+      }
       return next;
     });
   }
@@ -89,6 +146,9 @@ export function ProfileEditor({
       city: form.city || null,
       about: form.about || null,
       phone: form.phone || '',
+      goals: form.goals || null,
+      hobbies: form.hobbies || null,
+      videoUrl: form.videoUrl || null,
     };
 
     // Проверяем теми же правилами, что и сервер: иначе человек узнаёт
@@ -101,6 +161,8 @@ export function ProfileEditor({
         if (!next[key]) next[key] = issue.message;
       }
       setErrors(next);
+      // Ошибка может быть в блоке, до которого человек не долистал
+      toast.error('Проверьте поля, отмеченные красным');
       return;
     }
 
@@ -130,17 +192,44 @@ export function ProfileEditor({
     }
   }
 
+  const complete = completeness.percent >= COMPLETE_PROFILE_PERCENT;
+
   return (
-    <div className="mx-auto w-full max-w-[42rem] pb-16">
+    <div className="mx-auto w-full max-w-[42rem] pb-28">
       <header className="mb-8">
         <h1 className="text-display-md text-paper">Профиль</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-paper-dim">
-          Так вас видит работодатель, которому вы откликнулись. Изменения
-          применяются к будущим откликам и к ленте подбора.
+          Так вас видит работодатель, которому вы откликнулись. Это не резюме:
+          здесь считается и то, что вы делали, пробовали и организовывали.
         </p>
       </header>
 
       <div className="space-y-8">
+        <section className="glass rounded-3xl p-6 sm:p-7" aria-live="polite">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
+              Заполненность профиля
+            </h2>
+            <span className="text-[20px] font-semibold tabular-nums text-paper">{completeness.percent}%</span>
+          </div>
+          <div className="mt-3 h-[5px] w-full overflow-hidden rounded-full bg-paper/[0.08]">
+            <motion.div
+              className={complete ? 'h-full rounded-full bg-yes-glow' : 'h-full rounded-full bg-accent-400'}
+              initial={false}
+              animate={{ width: `${completeness.percent}%` }}
+              transition={{ duration: durations.base, ease: easeOutExpo }}
+            />
+          </div>
+          <p className="mt-3 text-[13px] leading-relaxed text-paper-dim">
+            {complete
+              ? 'Профиль выглядит полно — работодатель увидит больше, чем резюме.'
+              : 'Работодатели охотнее отвечают на заполненные профили.'}
+            {completeness.missing.length > 0 && (
+              <span className="block text-paper-faint">Не хватает: {completeness.missing.join(', ')}.</span>
+            )}
+          </p>
+        </section>
+
         <Section title="Фото">
           <PhotoUpload
             value={form.photoUrl}
@@ -178,7 +267,7 @@ export function ProfileEditor({
               error={errors.birthYear}
               onChange={(e) => patch({ birthYear: Number(e.target.value) })}
               options={Array.from({ length: 27 }, (_, i) => {
-                const year = CURRENT_YEAR - 14 - i;
+                const year = CURRENT_YEAR - 18 - i;
                 return { value: String(year), label: String(year) };
               })}
             />
@@ -191,6 +280,14 @@ export function ProfileEditor({
               error={errors.phone}
               hint="Необязательно. Виден только тем, кому вы откликнулись."
               onChange={(e) => patch({ phone: e.target.value })}
+            />
+
+            <TextAreaField
+              label="Пара слов о себе"
+              value={form.about}
+              maxCount={600}
+              error={errors.about}
+              onChange={(e) => patch({ about: e.target.value })}
             />
           </div>
         </Section>
@@ -235,50 +332,194 @@ export function ProfileEditor({
           </div>
         </Section>
 
-        <Section title="Когда можете работать">
-          <div className="space-y-8">
+        <Section title="Что ищете и зачем">
+          <div className="space-y-5">
             <fieldset>
               <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
-                Дни
+                Что ищете
               </legend>
               <div className="flex flex-wrap gap-2">
-                {WEEKDAYS.map((day) => (
+                {LOOKING_FOR.map((kind) => (
                   <Chip
-                    key={day}
-                    selected={form.workDays.includes(day)}
+                    key={kind}
+                    selected={form.lookingFor.includes(kind)}
                     onToggle={() =>
                       patch({
-                        workDays: form.workDays.includes(day)
-                          ? form.workDays.filter((d) => d !== day)
-                          : [...form.workDays, day],
+                        lookingFor: form.lookingFor.includes(kind)
+                          ? form.lookingFor.filter((k) => k !== kind)
+                          : [...form.lookingFor, kind],
                       })
                     }
-                    className="min-w-[3.25rem] justify-center"
                   >
-                    {WEEKDAY_LABEL[day]}
-                  </Chip>
-                ))}
-              </div>
-              {errors.workDays && <p className="pt-2.5 text-[12.5px] text-danger">{errors.workDays}</p>}
-            </fieldset>
-
-            <fieldset>
-              <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
-                Часов в неделю
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {HOURS_OPTIONS.map((hours) => (
-                  <Chip
-                    key={hours}
-                    selected={form.hoursPerWeek === hours}
-                    onToggle={() => patch({ hoursPerWeek: hours })}
-                  >
-                    до {hours} ч
+                    {LOOKING_FOR_LABEL[kind]}
                   </Chip>
                 ))}
               </div>
             </fieldset>
+            <TextAreaField
+              label="Цели и профессиональные интересы"
+              value={form.goals}
+              maxCount={600}
+              error={errors.goals}
+              hint="Кем хотите стать, что интересно, куда растёте."
+              onChange={(e) => patch({ goals: e.target.value })}
+            />
           </div>
+        </Section>
+
+        <Section title="Проекты">
+          <p className="mb-4 text-[13px] leading-relaxed text-paper-faint">
+            Учебные, свои, предпринимательские, IT, творческие — всё, что вы делали сами.
+          </p>
+          {errors.projects && <p className="mb-3 text-[12.5px] text-danger">{errors.projects}</p>}
+          <div className="space-y-3">
+            {form.projects.map((project, i) => (
+              <ItemCard key={i} onRemove={() => patch({ projects: removeAt(form.projects, i) })} label="проект">
+                <TextField
+                  label="Название"
+                  value={project.title}
+                  error={errors[`projects.${i}.title`]}
+                  onChange={(e) => patch({ projects: replaceAt(form.projects, i, { title: e.target.value }) })}
+                />
+                <TextAreaField
+                  label="Что сделали"
+                  value={project.description ?? ''}
+                  maxCount={600}
+                  error={errors[`projects.${i}.description`]}
+                  onChange={(e) =>
+                    patch({ projects: replaceAt(form.projects, i, { description: e.target.value }) })
+                  }
+                />
+                <TextField
+                  label="Ссылка"
+                  type="url"
+                  inputMode="url"
+                  value={project.link ?? ''}
+                  error={errors[`projects.${i}.link`]}
+                  hint="Необязательно. https://…"
+                  onChange={(e) => patch({ projects: replaceAt(form.projects, i, { link: e.target.value }) })}
+                />
+              </ItemCard>
+            ))}
+          </div>
+          <AddButton
+            disabled={form.projects.length >= LIMITS.projects}
+            onClick={() => patch({ projects: [...form.projects, { title: '', description: null, link: null }] })}
+          >
+            Добавить проект
+          </AddButton>
+        </Section>
+
+        <Section title="Достижения">
+          <p className="mb-4 text-[13px] leading-relaxed text-paper-faint">
+            Олимпиады, конкурсы, конференции, дипломы — и участие тоже, не только победы.
+          </p>
+          {errors.achievements && <p className="mb-3 text-[12.5px] text-danger">{errors.achievements}</p>}
+          <div className="space-y-3">
+            {form.achievements.map((item, i) => (
+              <ItemCard key={i} onRemove={() => patch({ achievements: removeAt(form.achievements, i) })} label="достижение">
+                <TextField
+                  label="Что"
+                  value={item.title}
+                  error={errors[`achievements.${i}.title`]}
+                  onChange={(e) =>
+                    patch({ achievements: replaceAt(form.achievements, i, { title: e.target.value }) })
+                  }
+                />
+                <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
+                  <TextField
+                    label="Подробнее"
+                    value={item.description ?? ''}
+                    error={errors[`achievements.${i}.description`]}
+                    onChange={(e) =>
+                      patch({ achievements: replaceAt(form.achievements, i, { description: e.target.value }) })
+                    }
+                  />
+                  <TextField
+                    label="Год"
+                    type="number"
+                    inputMode="numeric"
+                    value={item.year === null ? '' : String(item.year)}
+                    error={errors[`achievements.${i}.year`]}
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      const year = value === '' ? null : Number(value);
+                      patch({
+                        achievements: replaceAt(form.achievements, i, {
+                          year: year !== null && Number.isFinite(year) ? year : null,
+                        }),
+                      });
+                    }}
+                  />
+                </div>
+              </ItemCard>
+            ))}
+          </div>
+          <AddButton
+            disabled={form.achievements.length >= LIMITS.achievements}
+            onClick={() =>
+              patch({ achievements: [...form.achievements, { title: '', description: null, year: null }] })
+            }
+          >
+            Добавить достижение
+          </AddButton>
+        </Section>
+
+        <Section title="Занятия и активность">
+          <p className="mb-4 text-[13px] leading-relaxed text-paper-faint">
+            Спорт, музыкальная или художественная школа, языки, кружки, староста, волонтёрство, клубы.
+          </p>
+          {errors.activities && <p className="mb-3 text-[12.5px] text-danger">{errors.activities}</p>}
+          <div className="space-y-3">
+            {form.activities.map((item, i) => (
+              <ItemCard key={i} onRemove={() => patch({ activities: removeAt(form.activities, i) })} label="занятие">
+                <div className="flex flex-wrap gap-2">
+                  {ACTIVITY_KINDS.map((kind) => (
+                    <Chip
+                      key={kind}
+                      selected={item.kind === kind}
+                      onToggle={() => patch({ activities: replaceAt(form.activities, i, { kind }) })}
+                    >
+                      {ACTIVITY_KIND_LABEL[kind]}
+                    </Chip>
+                  ))}
+                </div>
+                <TextField
+                  label="Чем занимались"
+                  value={item.title}
+                  error={errors[`activities.${i}.title`]}
+                  onChange={(e) => patch({ activities: replaceAt(form.activities, i, { title: e.target.value }) })}
+                />
+                <TextField
+                  label="Подробнее"
+                  value={item.description ?? ''}
+                  error={errors[`activities.${i}.description`]}
+                  hint="Необязательно: сколько лет, какая роль, результат."
+                  onChange={(e) =>
+                    patch({ activities: replaceAt(form.activities, i, { description: e.target.value }) })
+                  }
+                />
+              </ItemCard>
+            ))}
+          </div>
+          <AddButton
+            disabled={form.activities.length >= LIMITS.activities}
+            onClick={() =>
+              patch({ activities: [...form.activities, { kind: 'SPORT', title: '', description: null }] })
+            }
+          >
+            Добавить занятие
+          </AddButton>
+        </Section>
+
+        <Section title="Хобби и интересы">
+          <TextAreaField
+            label="Чем увлекаетесь"
+            value={form.hobbies}
+            maxCount={400}
+            error={errors.hobbies}
+            onChange={(e) => patch({ hobbies: e.target.value })}
+          />
         </Section>
 
         <Section title="Навыки и резюме">
@@ -288,14 +529,6 @@ export function ProfileEditor({
               {errors.skills && <p className="pt-2 text-[12.5px] text-danger">{errors.skills}</p>}
             </div>
 
-            <TextAreaField
-              label="Пара слов о себе"
-              value={form.about}
-              maxCount={600}
-              error={errors.about}
-              onChange={(e) => patch({ about: e.target.value })}
-            />
-
             <ResumeUpload
               value={form.resumeUrl}
               fileName={form.resumeName}
@@ -304,11 +537,58 @@ export function ProfileEditor({
           </div>
         </Section>
 
+        <Section title="Ссылки и видео-визитка">
+          <p className="mb-4 text-[13px] leading-relaxed text-paper-faint">
+            Портфолио, сертификаты, GitHub, публикации. Только ссылки https://
+          </p>
+          {errors.links && <p className="mb-3 text-[12.5px] text-danger">{errors.links}</p>}
+          <div className="space-y-3">
+            {form.links.map((link, i) => (
+              <ItemCard key={i} onRemove={() => patch({ links: removeAt(form.links, i) })} label="ссылку">
+                <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+                  <TextField
+                    label="Подпись"
+                    value={link.label}
+                    error={errors[`links.${i}.label`]}
+                    onChange={(e) => patch({ links: replaceAt(form.links, i, { label: e.target.value }) })}
+                  />
+                  <TextField
+                    label="Ссылка"
+                    type="url"
+                    inputMode="url"
+                    value={link.url}
+                    error={errors[`links.${i}.url`]}
+                    onChange={(e) => patch({ links: replaceAt(form.links, i, { url: e.target.value }) })}
+                  />
+                </div>
+              </ItemCard>
+            ))}
+          </div>
+          <AddButton
+            disabled={form.links.length >= LIMITS.links}
+            onClick={() => patch({ links: [...form.links, { label: '', url: '' }] })}
+          >
+            Добавить ссылку
+          </AddButton>
+
+          <div className="mt-6">
+            <TextField
+              label="Видео-визитка"
+              type="url"
+              inputMode="url"
+              value={form.videoUrl}
+              error={errors.videoUrl}
+              hint="Необязательно. Ссылка на видео: VK Видео, YouTube, Яндекс Диск."
+              onChange={(e) => patch({ videoUrl: e.target.value })}
+            />
+          </div>
+        </Section>
+
         <Section title="Вход и согласие">
           <div className="space-y-4 text-[13.5px] leading-relaxed">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2">
               <span className="text-paper-faint">Почта</span>
-              <span className="text-paper">{email}</span>
+              <span className="min-w-0 break-all text-paper">{email}</span>
             </div>
             <p className="text-[12.5px] leading-relaxed text-paper-faint">
               Почта — это вход в аккаунт, поменять её здесь нельзя: смена
@@ -345,7 +625,15 @@ export function ProfileEditor({
             <div className="mx-auto flex max-w-[42rem] items-center justify-between gap-4">
               <span className="text-[13px] text-paper-dim">Есть несохранённые изменения</span>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" disabled={saving} onClick={() => setForm(saved)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => {
+                    setForm(saved);
+                    setErrors({});
+                  }}
+                >
                   Отменить
                 </Button>
                 <Button size="sm" loading={saving} onClick={() => void save()} icon={<Check />}>
@@ -366,6 +654,47 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-5 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function ItemCard({
+  children,
+  onRemove,
+  label,
+}: {
+  children: React.ReactNode;
+  onRemove: () => void;
+  label: string;
+}) {
+  return (
+    <div className="relative space-y-3 rounded-2xl border border-[var(--hairline)] bg-graphite-950/40 p-4 pt-11 sm:p-5 sm:pt-11">
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Удалить ${label}`}
+        title={`Удалить ${label}`}
+        className="absolute right-2.5 top-2.5 grid size-8 place-items-center rounded-full text-paper-faint transition-colors hover:bg-danger/15 hover:text-danger"
+      >
+        <X className="size-4" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
+function AddButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Button variant="outline" size="sm" className="mt-4" onClick={onClick} disabled={disabled} icon={<Plus />}>
+      {children}
+    </Button>
   );
 }
 

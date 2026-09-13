@@ -17,7 +17,16 @@ import { useCurtainNav } from '@/components/motion/RouteCurtain';
 import { durations, easeOutExpo, springSoft, stepVariants } from '@/lib/motion';
 import { registrationSteps } from '@/lib/validation';
 import { cn } from '@/lib/utils';
-import { GENDERS, WEEKDAYS, WEEKDAY_LABEL, type Gender, type Weekday } from '@/lib/types';
+import {
+  GENDERS,
+  LOOKING_FOR,
+  LOOKING_FOR_LABEL,
+  WEEKDAYS,
+  WEEKDAY_LABEL,
+  type Gender,
+  type LookingFor,
+  type Weekday,
+} from '@/lib/types';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -50,6 +59,7 @@ interface FormState {
   workDays: Weekday[];
   hoursPerWeek: number | null;
   skills: string[];
+  lookingFor: LookingFor[];
   about: string;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -71,6 +81,7 @@ const INITIAL: FormState = {
   workDays: [],
   hoursPerWeek: 20,
   skills: [],
+  lookingFor: [],
   about: '',
   resumeUrl: null,
   resumeName: null,
@@ -136,6 +147,7 @@ export function RegistrationWizard() {
       case 'skills':
         return {
           skills: form.skills,
+          lookingFor: form.lookingFor,
           about: form.about || null,
           resumeUrl: form.resumeUrl,
           resumeName: form.resumeName,
@@ -330,7 +342,7 @@ export function RegistrationWizard() {
               error={errors.birthYear}
               onChange={(e) => patch({ birthYear: Number(e.target.value) })}
               options={Array.from({ length: 27 }, (_, i) => {
-                const year = CURRENT_YEAR - 14 - i;
+                const year = CURRENT_YEAR - 18 - i;
                 return { value: String(year), label: String(year) };
               })}
             />
@@ -449,6 +461,31 @@ export function RegistrationWizard() {
       case 'skills':
         return (
           <div className="space-y-7">
+            <fieldset>
+              <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
+                Что ищете
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {LOOKING_FOR.map((kind) => (
+                  <Chip
+                    key={kind}
+                    selected={form.lookingFor.includes(kind)}
+                    onToggle={() =>
+                      patch({
+                        lookingFor: form.lookingFor.includes(kind)
+                          ? form.lookingFor.filter((k) => k !== kind)
+                          : [...form.lookingFor, kind],
+                      })
+                    }
+                  >
+                    {LOOKING_FOR_LABEL[kind]}
+                  </Chip>
+                ))}
+              </div>
+              <p className="pt-3 text-[12.5px] leading-snug text-paper-faint">
+                Проекты, достижения и остальное портфолио — в разделе «Профиль» после регистрации.
+              </p>
+            </fieldset>
             <div>
               <p className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
                 Навыки

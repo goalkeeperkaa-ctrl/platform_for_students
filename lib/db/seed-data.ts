@@ -1,3 +1,4 @@
+import type { AchievementItem, ActivityItem, LinkItem, LookingFor, ProjectItem } from '@/lib/types';
 import type { CrmVacancyInput } from './types';
 
 /**
@@ -487,6 +488,32 @@ export const DEMO_STUDENT_PROFILE = {
   hoursPerWeek: 22,
   skills: ['Excel', 'SMM', 'Английский B2', 'Копирайтинг', 'Figma'],
   about: 'Ищу подработку в маркетинге или сфере услуг. Свободна во второй половине дня.',
+
+  // Портфолио демо-студента заполнено не целиком намеренно: так на демо
+  // видно и то, как выглядит заполненный блок, и подсказку «чего не хватает»
+  lookingFor: ['JOB', 'INTERNSHIP'] as LookingFor[],
+  goals: 'Вырасти в маркетолога в продуктовой компании. Интересны контент и исследования аудитории.',
+  projects: [
+    {
+      title: 'Соцсети студенческого медиа факультета',
+      description: 'Контент-план и публикации на протяжении года, аудитория выросла с 1,2 до 4 тысяч.',
+      link: null,
+    },
+  ] as ProjectItem[],
+  achievements: [
+    { title: 'Финалист кейс-чемпионата по маркетингу', description: null, year: 2025 },
+  ] as AchievementItem[],
+  activities: [
+    {
+      kind: 'COMMUNITY',
+      title: 'Организатор мероприятий факультета',
+      description: 'Три фестиваля и дни открытых дверей.',
+    },
+    { kind: 'SPORT', title: 'Волейбол, шесть лет', description: null },
+  ] as ActivityItem[],
+  hobbies: 'Фотография, настольные игры',
+  links: [] as LinkItem[],
+  videoUrl: null as string | null,
 };
 
 export const CONSENT_VERSION = '2026-01-15';

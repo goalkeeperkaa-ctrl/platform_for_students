@@ -40,6 +40,15 @@ export async function PATCH(request: Request) {
       hoursPerWeek: input.hoursPerWeek,
       skills: input.skills,
       about: input.about || null,
+      // Портфолио — только пришедшее: undefined значит «не менять»
+      lookingFor: input.lookingFor,
+      goals: input.goals,
+      projects: input.projects,
+      achievements: input.achievements,
+      activities: input.activities,
+      hobbies: input.hobbies,
+      links: input.links,
+      videoUrl: input.videoUrl,
     });
 
     // Имя лежит в сессионном токене — шапка берёт его оттуда, а не из
