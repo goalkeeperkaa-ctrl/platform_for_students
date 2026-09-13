@@ -47,7 +47,11 @@ export default async function InstitutionsPage() {
         {institutions.length === 0 ? (
           <p className="mt-10 text-[14px] text-paper-faint">Справочник пока пуст.</p>
         ) : (
-          Array.from(byCity.entries()).map(([city, list]) => (
+          // Города с большим числом вузов — выше: иначе по алфавиту Москва
+          // уезжала под Долгопрудный и Казань
+          Array.from(byCity.entries())
+            .sort(([a, x], [b, y]) => y.length - x.length || a.localeCompare(b, 'ru'))
+            .map(([city, list]) => (
             <section key={city} className="mt-8">
               <h2 className="flex items-center gap-1.5 text-eyebrow uppercase text-paper-faint">
                 <MapPin className="size-3.5" aria-hidden />
