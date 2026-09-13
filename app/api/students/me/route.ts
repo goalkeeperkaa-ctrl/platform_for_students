@@ -4,6 +4,8 @@ import { studentName } from '@/lib/db/mappers';
 import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
 import { profileUpdateSchema } from '@/lib/validation';
+import { track } from '@/lib/analytics';
+import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import type { SessionUser } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -89,6 +91,13 @@ export async function PATCH(request: Request) {
     );
     if (resetVerification) {
       await audit(session, { action: 'student.study.reset', entity: 'Student', entityId: student.id }, request.headers);
+    }
+    // Событие — в момент, когда профиль впервые перешёл порог заполненности
+    if (
+      profileCompleteness(student).percent < COMPLETE_PROFILE_PERCENT &&
+      profileCompleteness(updated).percent >= COMPLETE_PROFILE_PERCENT
+    ) {
+      await track('student.profile.completed', { studentId: student.id });
     }
 
     return ok({ name, studyVerified: updated.studyVerified });

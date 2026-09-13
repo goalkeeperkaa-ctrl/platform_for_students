@@ -6,6 +6,8 @@ import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { HOME_BY_ROLE, SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
 import { registrationSchema } from '@/lib/validation';
+import { track } from '@/lib/analytics';
+import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import type { SessionUser } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -72,6 +74,10 @@ export async function POST(request: Request) {
         meta: { version: CONSENT_VERSION },
       }, request.headers);
       await audit(session, { action: 'student.registered', entity: 'Student', entityId: student.id }, request.headers);
+      await track('student.registered', { studentId: student.id });
+      if (profileCompleteness(student).percent >= COMPLETE_PROFILE_PERCENT) {
+        await track('student.profile.completed', { studentId: student.id });
+      }
 
       return ok({ redirectTo: HOME_BY_ROLE.STUDENT }, { status: 201 });
     } catch (err) {

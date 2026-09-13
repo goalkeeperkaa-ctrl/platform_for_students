@@ -383,6 +383,44 @@ export interface ModerationVacancyDTO {
   vacancy: VacancyDTO;
 }
 
+/**
+ * События пилота — шаги пути с доски Miro: регистрация, заполненный профиль,
+ * публикация вакансии, отклик, просмотр профиля, следующий шаг.
+ */
+export const EVENT_TYPES = [
+  'student.registered',
+  'student.profile.completed',
+  'company.registered',
+  'company.approved',
+  'vacancy.published',
+  'application.created',
+  'profile.viewed',
+  'application.next_step',
+] as const;
+export type EventType = (typeof EVENT_TYPES)[number];
+
+export const EVENT_LABEL: Record<EventType, string> = {
+  'student.registered': 'Студент зарегистрировался',
+  'student.profile.completed': 'Студент заполнил профиль',
+  'company.registered': 'Компания зарегистрировалась',
+  'company.approved': 'Компания одобрена',
+  'vacancy.published': 'Вакансия опубликована',
+  'application.created': 'Отклик на вакансию',
+  'profile.viewed': 'Работодатель открыл профиль',
+  'application.next_step': 'Следующий шаг по отклику',
+};
+
+/** Метрики пилота для панели HR. Длительности — медианы. */
+export interface PilotMetricsDTO {
+  students: { registered: number; completedProfile: number; applied: number; gotOpportunity: number; verified: number };
+  companies: { total: number; selfRegistered: number; approved: number; withPublishedVacancy: number };
+  vacancies: { published: number; fromCabinet: number };
+  applications: { total: number; viewed: number; nextStep: number; hired: number };
+  profileViews: number;
+  timing: { firstApplicationHours: number | null; firstOpportunityDays: number | null };
+  events: Array<{ id: string; type: string; label: string; subject: string | null; createdAt: string }>;
+}
+
 /** Вуз в подсказках при вводе. */
 export interface InstitutionOption {
   id: string;

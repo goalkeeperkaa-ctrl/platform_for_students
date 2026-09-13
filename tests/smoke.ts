@@ -922,6 +922,41 @@ async function main() {
     check('вакансию из CRM из кабинета не изменить', crmEdit.status === 409, crmEdit.status);
   }
 
+  // ---------- Метрики пилота ----------
+  console.log('\nМетрики пилота');
+  const severId = (await employer.request('/api/auth/me')).body.session?.profileId as string;
+  const severVacancy = (((await student.request('/api/feed')).body?.vacancies ?? []) as Array<{ id: string; companyId: string | null }>).find(
+    (v) => v.companyId === severId,
+  );
+  if (severVacancy) await student.post('/api/swipes', { vacancyId: severVacancy.id, direction: 'RIGHT' });
+  const freshApplication = (((await employer.request('/api/employer/applications')).body?.applications ?? []) as Array<{ id: string; status: string }>).find(
+    (a) => a.status === 'NEW',
+  );
+  check('у работодателя есть новый отклик', !!freshApplication);
+  if (freshApplication) {
+    const foreignView = await company.post('/api/employer/applications/view', { applicationId: freshApplication.id });
+    check('чужой отклик не отметить просмотренным', foreignView.status === 403, foreignView.status);
+    const viewed = await employer.post('/api/employer/applications/view', { applicationId: freshApplication.id });
+    check('открытие карточки отмечает отклик просмотренным', viewed.status === 200 && viewed.body?.status === 'VIEWED', viewed.body);
+    const viewedAgain = await employer.post('/api/employer/applications/view', { applicationId: freshApplication.id });
+    check('повторное открытие статус не меняет', viewedAgain.status === 200 && viewedAgain.body?.status === 'VIEWED', viewedAgain.body);
+  }
+
+  check('метрики пилота закрыты для работодателя', (await employer.request('/api/admin/pilot')).status === 401);
+  check('метрики пилота закрыты для студента', (await student.request('/api/admin/pilot')).status === 401);
+  const pilot = await admin.request('/api/admin/pilot');
+  check(
+    'метрики пилота считаются',
+    pilot.status === 200 && typeof pilot.body?.students?.registered === 'number' && 'firstOpportunityDays' in (pilot.body?.timing ?? {}),
+    pilot.body,
+  );
+  const eventTypes = ((pilot.body?.events ?? []) as Array<{ type: string }>).map((e) => e.type);
+  check('в журнале есть публикация вакансии', eventTypes.includes('vacancy.published'), eventTypes.slice(0, 12));
+  check('в журнале есть регистрация компании', eventTypes.includes('company.registered'), eventTypes.slice(0, 12));
+  if (freshApplication) check('в журнале есть просмотр профиля', eventTypes.includes('profile.viewed'), eventTypes.slice(0, 12));
+  if (severVacancy) check('в журнале есть отклик', eventTypes.includes('application.created'), eventTypes.slice(0, 12));
+  check('страница метрик пилота открывается', (await admin.request('/admin/pilot')).status === 200);
+
   // ---------- Перебор пароля ----------
   // Порог висит на учётной записи, а не только на адресе: за одним IP
   // сидит целый кампус, и рубить их всех из-за одного подборщика нельзя.

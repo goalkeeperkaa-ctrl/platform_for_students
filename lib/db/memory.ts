@@ -26,6 +26,7 @@ import type {
   CrmVacancyInput,
   DataStore,
   EmployerRecord,
+  EventRecord,
   InstitutionRecord,
   MessageRecord,
   NewEmployerInput,
@@ -61,6 +62,7 @@ interface Tables {
   accessCodes: AccessCodeRecord[];
   syncRuns: SyncRunRecord[];
   audit: AuditRecord[];
+  events: EventRecord[];
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -99,6 +101,7 @@ async function seed(): Promise<Tables> {
     accessCodes: [],
     syncRuns: [],
     audit: [],
+    events: [],
   };
 
   // --- Работодатели и вакансии из «CRM» ---
@@ -956,6 +959,23 @@ export async function createMemoryStore(): Promise<DataStore> {
       },
       async list(limit) {
         return clone([...t.audit].sort((a, b) => +b.createdAt - +a.createdAt).slice(0, limit));
+      },
+    },
+
+    events: {
+      async log(entry) {
+        t.events.push({ ...entry, id: randomUUID(), createdAt: now() });
+        // Как и журнал аудита: в памяти процесса он не должен расти бесконечно
+        if (t.events.length > 5000) t.events.splice(0, t.events.length - 5000);
+      },
+      async list({ types, limit }) {
+        const only = types ? new Set(types) : null;
+        return clone(
+          t.events
+            .filter((e) => !only || only.has(e.type))
+            .sort((a, b) => +b.createdAt - +a.createdAt)
+            .slice(0, limit),
+        );
       },
     },
   };

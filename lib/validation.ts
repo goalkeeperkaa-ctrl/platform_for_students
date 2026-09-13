@@ -159,6 +159,11 @@ export const applicationStatusSchema = z.object({
   note: z.string().trim().max(1000).nullable().optional(),
 });
 
+/** Работодатель открыл карточку кандидата. */
+export const applicationViewSchema = z.object({
+  applicationId: z.string().min(1),
+});
+
 /** HR меняет студента: статус в работе и/или подтверждение учёбы. */
 export const adminStudentUpdateSchema = z
   .object({

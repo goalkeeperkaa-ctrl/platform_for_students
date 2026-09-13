@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { fail, handle, ok, tooManyRequests } from '@/lib/api';
 import { getStore, isAccountExistsError } from '@/lib/db';
 import { COMPANY_CONSENT_VERSION, companyRegistrationSchema } from '@/lib/company';
+import { track } from '@/lib/analytics';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
         { action: 'employer.registered', entity: 'Employer', entityId: employer.id },
         request.headers,
       );
+      await track('company.registered', { employerId: employer.id });
 
       // Сразу на страницу компании: без неё студент увидит пустую карточку
       return ok({ redirectTo: '/employer/company', moderationStatus: employer.moderationStatus }, { status: 201 });

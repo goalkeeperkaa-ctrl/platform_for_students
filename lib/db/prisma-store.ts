@@ -495,6 +495,18 @@ export function createPrismaStore(): DataStore {
         return rows.map((r) => ({ ...r, meta: (r.meta ?? null) as Record<string, unknown> | null }));
       },
     },
+
+    events: {
+      async log(entry) {
+        await prisma.analyticsEvent.create({ data: entry });
+      },
+      list: ({ types, limit }) =>
+        prisma.analyticsEvent.findMany({
+          where: types ? { type: { in: types } } : undefined,
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        }),
+    },
   };
 }
 

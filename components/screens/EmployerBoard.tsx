@@ -51,6 +51,35 @@ export function EmployerBoard({ board }: { board: BoardData }) {
 
   const fresh = applications.filter((a) => a.status === 'NEW').length;
 
+  function toggle(application: EmployerApplicationDTO) {
+    const opening = expanded !== application.id;
+    setExpanded(opening ? application.id : null);
+    // Первое открытие нового отклика — «просмотрен»: студент видит, что его заметили
+    if (opening && application.status === 'NEW') void markViewed(application);
+  }
+
+  async function markViewed(application: EmployerApplicationDTO) {
+    setApplications((current) =>
+      current.map((a) =>
+        a.id === application.id ? { ...a, status: 'VIEWED', statusChangedAt: new Date().toISOString() } : a,
+      ),
+    );
+    try {
+      const response = await fetch('/api/employer/applications/view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId: application.id }),
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      // Без тоста: просмотр — побочное действие. Статус возвращается, и
+      // следующее открытие карточки повторит попытку
+      setApplications((current) =>
+        current.map((a) => (a.id === application.id ? { ...a, status: application.status } : a)),
+      );
+    }
+  }
+
   async function changeStatus(application: EmployerApplicationDTO, status: ApplicationStatus) {
     const previous = application.status;
     setPending(application.id);
@@ -130,7 +159,7 @@ export function EmployerBoard({ board }: { board: BoardData }) {
               application={application}
               expanded={expanded === application.id}
               pending={pending === application.id}
-              onToggle={() => setExpanded((id) => (id === application.id ? null : application.id))}
+              onToggle={() => toggle(application)}
               onStatus={(status) => void changeStatus(application, status)}
             />
           </Reveal>

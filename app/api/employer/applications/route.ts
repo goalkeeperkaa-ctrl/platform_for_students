@@ -2,6 +2,7 @@ import { fail, handle, ok } from '@/lib/api';
 import { assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
 import { buildEmployerBoard } from '@/lib/services';
 import { applicationStatusSchema } from '@/lib/validation';
+import { NEXT_STEP_STATUSES, track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,17 @@ export async function PATCH(request: Request) {
     // Статус отклика тянет за собой статус студента: вышел на работу —
     // значит, он больше не в поиске, и HR-менеджер не должен его дёргать.
     if (status === 'HIRED') await store.students.setStatus(application.studentId, 'PLACED');
+
+    // Приглашение, собеседование, выход — возможность, которую студент получил
+    // через платформу. Повторное нажатие того же статуса событием не считается
+    if (NEXT_STEP_STATUSES.includes(status) && application.status !== status) {
+      await track('application.next_step', {
+        studentId: application.studentId,
+        employerId: employer.id,
+        vacancyId: vacancy.id,
+        applicationId,
+      });
+    }
 
     await audit(
       session,

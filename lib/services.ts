@@ -4,10 +4,15 @@ import { scoreMatch, studentName, toStudentDTO, toVacancyDTO } from '@/lib/db/ma
 import { decryptSafe } from '@/lib/security/crypto';
 import type { EmployerRecord, InstitutionRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
 import { isVacancyVisible } from '@/lib/vacancy';
+import { NEXT_STEP_STATUSES } from '@/lib/analytics';
+import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import {
   APPLICATION_STATUSES,
+  EVENT_LABEL,
   STUDENT_STATUSES,
   type AdminStats,
+  type EventType,
+  type PilotMetricsDTO,
   type AdminStudentDTO,
   type InstitutionOption,
   type InstitutionPublicDTO,
@@ -533,6 +538,116 @@ export async function getInstitutionPublic(slug: string): Promise<InstitutionPub
   const store = await getStore();
   const item = await store.institutions.findBySlug(slug);
   return item ? toInstitutionPublic(item) : null;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const value = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Метрики пилота с доски Miro.
+ *
+ * Считаются по текущим данным, а не только по журналу событий: журнал
+ * появился посреди пилота, и всё, что было до него, иначе выпало бы из
+ * метрик. Журнал нужен там, где данных не хватает: первый просмотр
+ * профиля и момент первого приглашения — статус отклика хранит только
+ * последнее изменение.
+ *
+ * «Первая возможность» — первое приглашение, собеседование или выход на
+ * работу по любому отклику студента.
+ */
+export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
+  const store = await getStore();
+  const [students, applications, employers, vacancyCounts, visible, events] = await Promise.all([
+    store.students.list(),
+    store.applications.listAll(),
+    store.employers.list(),
+    store.vacancies.countAll(),
+    store.vacancies.listActive(),
+    store.events.list({ limit: 5000 }),
+  ]);
+
+  const studentById = new Map(students.map((s) => [s.id, s]));
+  const nextStep = new Set<string>(NEXT_STEP_STATUSES);
+  const keepEarliest = (map: Map<string, number>, key: string, time: number) => {
+    const previous = map.get(key);
+    if (previous === undefined || time < previous) map.set(key, time);
+  };
+
+  const firstApplication = new Map<string, number>();
+  const firstOpportunity = new Map<string, number>();
+  for (const a of applications) {
+    if (!studentById.has(a.studentId)) continue;
+    keepEarliest(firstApplication, a.studentId, +a.createdAt);
+    if (nextStep.has(a.status)) keepEarliest(firstOpportunity, a.studentId, +a.statusChangedAt);
+  }
+  for (const e of events) {
+    if (e.type === 'application.next_step' && e.studentId && studentById.has(e.studentId)) {
+      keepEarliest(firstOpportunity, e.studentId, +e.createdAt);
+    }
+  }
+
+  const sinceRegistration = (map: Map<string, number>, unitMs: number) =>
+    Array.from(map.entries()).flatMap(([id, time]) => {
+      const student = studentById.get(id);
+      return student ? [Math.max(0, time - +student.createdAt) / unitMs] : [];
+    });
+
+  const selfRegistered = employers.filter((e) => !e.crmClientId);
+  const latest = events.slice(0, 50);
+  const titles = new Map(
+    (
+      await store.vacancies.findManyByIds(
+        Array.from(new Set(latest.flatMap((e) => (e.vacancyId ? [e.vacancyId] : [])))),
+      )
+    ).map((v) => [v.id, v.title]),
+  );
+  const companyName = new Map(employers.map((e) => [e.id, e.companyName]));
+
+  return {
+    students: {
+      registered: students.length,
+      completedProfile: students.filter((s) => profileCompleteness(s).percent >= COMPLETE_PROFILE_PERCENT).length,
+      applied: firstApplication.size,
+      gotOpportunity: firstOpportunity.size,
+      verified: students.filter((s) => s.studyVerified).length,
+    },
+    companies: {
+      total: employers.length,
+      selfRegistered: selfRegistered.length,
+      approved: selfRegistered.filter((e) => e.moderationStatus === 'APPROVED').length,
+      withPublishedVacancy: new Set(visible.map((v) => v.employerId)).size,
+    },
+    vacancies: {
+      published: vacancyCounts.active,
+      fromCabinet: visible.filter((v) => !v.crmId).length,
+    },
+    applications: {
+      total: applications.length,
+      viewed: applications.filter((a) => a.status !== 'NEW').length,
+      nextStep: applications.filter((a) => nextStep.has(a.status)).length,
+      hired: applications.filter((a) => a.status === 'HIRED').length,
+    },
+    profileViews: events.filter((e) => e.type === 'profile.viewed').length,
+    timing: {
+      firstApplicationHours: median(sinceRegistration(firstApplication, 3_600_000)),
+      firstOpportunityDays: median(sinceRegistration(firstOpportunity, 86_400_000)),
+    },
+    events: latest.map((e) => ({
+      id: e.id,
+      type: e.type,
+      label: EVENT_LABEL[e.type as EventType] ?? e.type,
+      subject:
+        (e.vacancyId ? titles.get(e.vacancyId) : undefined) ??
+        (e.employerId ? companyName.get(e.employerId) : undefined) ??
+        null,
+      createdAt: e.createdAt.toISOString(),
+    })),
+  };
 }
 
 /** Студенты для панели HR, новые первыми, с числом откликов. */

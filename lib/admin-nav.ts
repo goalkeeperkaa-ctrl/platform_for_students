@@ -8,6 +8,7 @@ import type { NavItem } from '@/components/layout/NavTabs';
 export function adminNav(pendingModeration: number): NavItem[] {
   return [
     { href: '/admin', label: 'Панель', exact: true },
+    { href: '/admin/pilot', label: 'Пилот' },
     { href: '/admin/students', label: 'Студенты' },
     { href: '/admin/moderation', label: 'Модерация', badge: pendingModeration },
   ];

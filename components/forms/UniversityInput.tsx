@@ -101,7 +101,9 @@ export function UniversityInput({
           id={listId}
           role="listbox"
           aria-label="Вузы из справочника"
-          className="absolute inset-x-0 top-[66px] z-30 max-h-72 overflow-y-auto rounded-xl border border-[var(--hairline-strong)] bg-graphite-900/95 p-1 shadow-2xl backdrop-blur-glass"
+          // Фон непрозрачный: сквозь полупрозрачный просвечивала подсказка
+          // под полем и читалась поверх вариантов
+          className="absolute inset-x-0 top-[66px] z-30 max-h-72 overflow-y-auto rounded-xl border border-[var(--hairline-strong)] bg-graphite-900 p-1 shadow-2xl"
         >
           {matches.map((option, i) => (
             <li

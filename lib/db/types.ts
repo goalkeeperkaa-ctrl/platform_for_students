@@ -201,6 +201,17 @@ export interface AuditRecord {
   createdAt: Date;
 }
 
+/** Событие пилота. Только идентификаторы — без ПДн. */
+export interface EventRecord {
+  id: string;
+  type: string;
+  studentId: string | null;
+  employerId: string | null;
+  vacancyId: string | null;
+  applicationId: string | null;
+  createdAt: Date;
+}
+
 // ============ Входные данные ============
 
 /**
@@ -488,5 +499,11 @@ export interface DataStore {
   audit: {
     log(entry: Omit<AuditRecord, 'id' | 'createdAt'>): Promise<void>;
     list(limit: number): Promise<AuditRecord[]>;
+  };
+
+  events: {
+    log(entry: Omit<EventRecord, 'id' | 'createdAt'>): Promise<void>;
+    /** Новые первыми. types — только эти события */
+    list(filter: { types?: string[]; limit: number }): Promise<EventRecord[]>;
   };
 }

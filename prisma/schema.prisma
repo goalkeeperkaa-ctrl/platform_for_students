@@ -474,3 +474,22 @@ model Institution {
 
   @@index([city])
 }
+
+/// Событие пилота для метрик: шаг пути студента или компании.
+///
+/// Только идентификаторы и без внешних ключей: журнал живёт дольше анкеты,
+/// и после удаления студента событие остаётся обезличенным счётчиком, а не
+/// блокирует удаление и не тянет за собой ПДн.
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  type          String
+  studentId     String?
+  employerId    String?
+  vacancyId     String?
+  applicationId String?
+  createdAt     DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([createdAt])
+  @@index([studentId])
+}

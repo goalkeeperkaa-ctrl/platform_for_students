@@ -3,6 +3,7 @@ import { getStore } from '@/lib/db';
 import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
 import { buildModerationQueue } from '@/lib/services';
 import { moderationDecisionSchema } from '@/lib/vacancy';
+import { track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
         { action: approve ? 'employer.approved' : 'employer.rejected', entity: 'Employer', entityId: id },
         request.headers,
       );
+      if (approve) await track('company.approved', { employerId: id });
       return ok({ id, status: updated.moderationStatus });
     }
 
@@ -68,6 +70,7 @@ export async function POST(request: Request) {
         moderatedAt: now,
         publishedAt: now,
       });
+      await track('vacancy.published', { vacancyId: id, employerId: vacancy.employerId });
     } else {
       await store.vacancies.update(id, {
         status: 'REJECTED',

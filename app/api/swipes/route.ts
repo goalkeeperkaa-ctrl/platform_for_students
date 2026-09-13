@@ -3,6 +3,7 @@ import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { rateLimit } from '@/lib/security/rate-limit';
 import { swipeSchema, undoSwipeSchema } from '@/lib/validation';
 import { isVacancyVisible } from '@/lib/vacancy';
+import { track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,12 @@ export async function POST(request: Request) {
 
     if (direction === 'RIGHT') {
       const application = await store.applications.upsert({ studentId: student.id, vacancyId });
+      await track('application.created', {
+        studentId: student.id,
+        employerId: vacancy.employerId,
+        vacancyId,
+        applicationId: application.id,
+      });
       // Первый отклик переводит студента в работу HR-менеджера
       if (student.status === 'ACTIVE') await store.students.setStatus(student.id, 'IN_PROGRESS');
       await audit(
