@@ -19,8 +19,10 @@ import { emailSchema, passwordSchema } from '../lib/validation';
  * Новую учётку она не заводит: пустая почта — это опечатка в аргументе,
  * а не повод создать человека. Для администратора есть admin:create.
  *
- * Работодателей команда не трогает: они входят по коду из CRM, пароля у
- * них нет вовсе. Новый код выдаёт employer:code.
+ * Клиентов агентства из CRM команда не трогает: они входят по коду, пароля
+ * у них нет вовсе, новый код выдаёт employer:code. А компании, которые
+ * зарегистрировались сами, входят по почте и паролю — им пароль меняется
+ * так же, как студенту.
  *
  * Факт смены пишется в журнал аудита. Смена пароля снаружи интерфейса —
  * ровно то событие, о котором потом спрашивают «кто и когда», и ответ на
@@ -71,7 +73,10 @@ async function main() {
   try {
     const account = await prisma.account.findUnique({
       where: { emailHash: blindIndex(email) },
-      include: { student: { select: { id: true, fullNameEnc: true } } },
+      include: {
+        student: { select: { id: true, fullNameEnc: true } },
+        employer: { select: { companyName: true, crmClientId: true } },
+      },
     });
 
     if (!account) {
@@ -83,9 +88,11 @@ async function main() {
       return;
     }
 
-    if (account.role === 'EMPLOYER') {
+    // Клиент из CRM входит по коду: пароль ему не нужен, и заданный здесь
+    // открыл бы второй, никем не учтённый вход в кабинет
+    if (account.role === 'EMPLOYER' && account.employer?.crmClientId) {
       console.error(
-        'Это работодатель — он входит по коду из CRM, пароля у него нет.\n' +
+        'Это клиент агентства из CRM — он входит по коду, пароля у него нет.\n' +
           'Новый код: npm run employer:code',
       );
       process.exitCode = 1;
@@ -94,7 +101,9 @@ async function main() {
 
     const who = account.student
       ? decryptSafe(account.student.fullNameEnc, 'имя не читается')
-      : 'HR-менеджер';
+      : account.employer
+        ? `компания «${account.employer.companyName}»`
+        : 'HR-менеджер';
     console.log(`\nУчётная запись: ${email} · ${account.role} · ${who}`);
     console.log(`заведена: ${account.createdAt.toISOString().slice(0, 19)}`);
     console.log(

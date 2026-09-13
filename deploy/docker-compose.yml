@@ -14,12 +14,22 @@
 
 name: fhr-students
 
+# Журналы контейнеров — с ротацией. По умолчанию Docker пишет их без
+# ограничения, и за несколько месяцев они съедают диск сервера: первой
+# падает база, за ней всё остальное.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # Своя база — только при --profile db
   postgres:
     image: postgres:16-alpine
     profiles: ["db"]
     restart: always
+    logging: *default-logging
     environment:
       POSTGRES_DB: fhr_students
       POSTGRES_USER: postgres
@@ -38,6 +48,52 @@ services:
       timeout: 3s
       retries: 20
 
+  # Резервные копии своей базы и загруженных файлов — только при --profile db.
+  # Сразу при старте и дальше раз в сутки: копия перед каждым обновлением
+  # появляется сама. Хранятся BACKUP_KEEP_DAYS дней (по умолчанию 14) в томе
+  # backups; как забирать их с сервера — ЗАПУСК.md, часть 5.
+  backup:
+    image: postgres:16-alpine
+    profiles: ["db"]
+    restart: always
+    logging: *default-logging
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGDATABASE: fhr_students
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD:?задайте POSTGRES_ADMIN_PASSWORD в deploy/.env}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - backups:/backups
+      - uploads:/data/uploads:ro
+    entrypoint: ["/bin/sh", "-c"]
+    # Файл пишется под временным именем и переименовывается только после
+    # успеха: оборванная копия не должна выглядеть целой
+    command:
+      - |
+        while true; do
+          stamp=$$(date +%Y-%m-%d_%H%M)
+          if pg_dump --format=custom --file=/backups/db-$$stamp.dump.part; then
+            mv /backups/db-$$stamp.dump.part /backups/db-$$stamp.dump
+            echo "backup: база сохранена в db-$$stamp.dump"
+          else
+            rm -f /backups/db-$$stamp.dump.part
+            echo "backup: ОШИБКА копии базы" >&2
+          fi
+          if tar -czf /backups/uploads-$$stamp.tar.gz.part -C /data uploads; then
+            mv /backups/uploads-$$stamp.tar.gz.part /backups/uploads-$$stamp.tar.gz
+            echo "backup: файлы сохранены в uploads-$$stamp.tar.gz"
+          else
+            rm -f /backups/uploads-$$stamp.tar.gz.part
+            echo "backup: ОШИБКА копии файлов" >&2
+          fi
+          find /backups -type f -mtime +$${BACKUP_KEEP_DAYS} -delete
+          sleep 86400
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # Миграции — до старта приложения, один раз, и завершаются.
   # Отдельным шагом: два экземпляра приложения, стартующие вместе,
   # попытались бы мигрировать базу вдвоём.
@@ -47,6 +103,7 @@ services:
       target: tools
     image: fhr-students-tools
     restart: "no"
+    logging: *default-logging
     env_file: .env
     command: ["npx", "prisma", "migrate", "deploy"]
     depends_on:
@@ -61,6 +118,7 @@ services:
       target: runner
     image: fhr-students-app
     restart: always
+    logging: *default-logging
     env_file: .env
     # Порт не публикуется: снаружи к приложению ходит только Caddy.
     # Иначе заголовок X-Forwarded-For можно было бы подделать в обход
@@ -77,6 +135,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: always
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
@@ -95,5 +154,6 @@ services:
 volumes:
   pgdata:
   uploads:
+  backups:
   caddy_data:
   caddy_config:

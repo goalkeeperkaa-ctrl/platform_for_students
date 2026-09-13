@@ -561,11 +561,12 @@ export const DEMO_VACANCY_EXTRAS: Record<string, { learnings: string[]; team: st
 /**
  * Справочник вузов для старта пилота.
  *
- * Короткое название совпадает с тем, как вуз записан у демо-студентов:
- * по нему оба хранилища связывают студентов со справочником. Описания
- * нейтральные — страница учреждения не реклама и не рейтинг.
+ * Не демо-данные: на бою его загружает `npm run institutions:load`, а не
+ * `db:seed`. Лежит здесь, потому что демо-студенты связаны с ним по
+ * короткому названию — оно совпадает с тем, как вуз записан у них.
+ * Описания нейтральные — страница учреждения не реклама и не рейтинг.
  */
-export const DEMO_INSTITUTIONS: Array<{
+export const INSTITUTIONS: Array<{
   slug: string;
   name: string;
   shortName: string | null;
@@ -710,6 +711,9 @@ export const DEMO_INSTITUTIONS: Array<{
     website: 'https://www.nsu.ru',
   },
 ];
+
+/** Демо-хранилище и db:seed берут тот же справочник, что и боевая загрузка */
+export const DEMO_INSTITUTIONS = INSTITUTIONS;
 
 /**
  * Остальные студенты, отклики и переписка.
