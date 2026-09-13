@@ -128,8 +128,10 @@ export function EmployerVacancies({
             const isBusy = busy === vacancy.id;
             return (
               <li key={vacancy.id} className="surface min-w-0 rounded-3xl p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
+                {/* На телефоне статус над названием: в одну строку с бейджами
+                    название сжималось до столбика и рвалось посреди слова */}
+                <div className="flex flex-col-reverse items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
+                  <div className="min-w-0 sm:flex-1">
                     <h2 className="break-words text-[16.5px] font-semibold tracking-[-0.02em] text-paper">
                       {vacancy.title}
                     </h2>
