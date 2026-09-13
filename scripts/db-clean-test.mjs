@@ -24,8 +24,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
-/** Ровно то, что порождает tests/smoke.ts, и ничего кроме. */
-const SMOKE_EMAIL = /^smoke-\d+@demo\.ru$/;
+/**
+ * Ровно то, что порождает tests/smoke.ts, и ничего кроме: студент, студент
+ * для проверки профиля, компания и попытка регистрации младше 18.
+ */
+const SMOKE_EMAIL = /^smoke-(?:company-|profile-|minor-)?\d+@demo\.ru$/;
 
 function env(key) {
   const file = path.resolve(process.cwd(), '.env');

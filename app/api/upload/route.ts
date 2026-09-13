@@ -27,6 +27,15 @@ export async function POST(request: Request) {
     if (!Object.prototype.hasOwnProperty.call(UPLOAD_LIMITS, kind)) {
       return fail(400, 'Неизвестный тип загрузки', 'BAD_KIND');
     }
+    // Файлы компании раздаются публично, поэтому загружать их может только
+    // вошедший работодатель. Без этого кто угодно складывал бы на сервер
+    // картинки, которые потом открываются без входа.
+    if (kind === 'company') {
+      const session = await getSession();
+      if (!session || session.role !== 'EMPLOYER') {
+        return fail(401, 'Загружать изображения компании может только её кабинет', 'UNAUTHORIZED');
+      }
+    }
     if (!(file instanceof File)) {
       return fail(400, 'Файл не передан', 'NO_FILE');
     }

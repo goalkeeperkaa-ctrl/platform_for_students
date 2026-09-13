@@ -2,8 +2,10 @@ import type {
   ApplicationStatus,
   EmploymentType,
   Gender,
+  LinkItem,
   LookingFor,
   MessageAuthor,
+  ModerationStatus,
   Role,
   StudentPortfolio,
   StudentStatus,
@@ -64,6 +66,19 @@ export interface EmployerRecord {
   contactName: string;
   logoUrl: string | null;
   crmClientId: string | null;
+  industry: string | null;
+  about: string | null;
+  culture: string | null;
+  website: string | null;
+  city: string | null;
+  socials: LinkItem[];
+  photos: string[];
+  videoUrl: string | null;
+  moderationStatus: ModerationStatus;
+  moderationNote: string | null;
+  moderatedAt: Date | null;
+  consentVersion: string | null;
+  consentAt: Date | null;
   createdAt: Date;
 }
 
@@ -216,6 +231,38 @@ export interface NewStudentInput {
   consentIp: string | null;
 }
 
+/**
+ * Самостоятельная регистрация компании.
+ *
+ * Компания сразу получает кабинет, но студентам не видна, пока её не
+ * одобрит HR агентства: статус выставляет хранилище, а не форма, — иначе
+ * подменённое поле в запросе публиковало бы компанию в обход проверки.
+ */
+export interface NewEmployerInput {
+  email: string;
+  password: string;
+  companyName: string;
+  contactName: string;
+  industry: string | null;
+  city: string | null;
+  consentVersion: string;
+}
+
+/** Страница компании: всё, что компания меняет о себе сама. */
+export interface CompanyProfileUpdate {
+  companyName: string;
+  contactName: string;
+  logoUrl: string | null;
+  industry: string | null;
+  about: string | null;
+  culture: string | null;
+  website: string | null;
+  city: string | null;
+  socials: LinkItem[];
+  photos: string[];
+  videoUrl: string | null;
+}
+
 /** Форма вакансии, приходящая из CRM. crmId — ключ сопоставления. */
 export interface CrmVacancyInput {
   crmId: string;
@@ -289,6 +336,8 @@ export interface DataStore {
     findByAccountId(accountId: string): Promise<EmployerRecord | null>;
     findById(id: string): Promise<EmployerRecord | null>;
     list(): Promise<EmployerRecord[]>;
+    createWithAccount(input: NewEmployerInput): Promise<{ account: AccountRecord; employer: EmployerRecord }>;
+    updateProfile(id: string, input: CompanyProfileUpdate): Promise<EmployerRecord>;
   };
 
   vacancies: {

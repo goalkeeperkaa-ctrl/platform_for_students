@@ -36,13 +36,21 @@ export async function POST(request: Request) {
     // времени ответа выдаёт, какие адреса зарегистрированы.
     const passwordOk = await verifyPassword(input.password, account?.passwordHash);
 
-    if (!account || !passwordOk || !account.isActive || account.role === 'EMPLOYER') {
+    // Работодатель из CRM пароля не имеет и входит по коду — verifyPassword
+    // для него вернёт false. Компания, зарегистрировавшаяся сама, пароль
+    // задала и входит здесь же, как студент.
+    if (!account || !passwordOk || !account.isActive) {
       await audit(null, { action: 'auth.login.failed', meta: { emailHash } }, request.headers);
       return fail(401, 'Неверная почта или пароль', 'BAD_CREDENTIALS');
     }
 
     let profileId: string | null = null;
     let name = 'Администратор';
+    if (account.role === 'EMPLOYER') {
+      const employer = await store.employers.findByAccountId(account.id);
+      profileId = employer?.id ?? null;
+      name = employer?.companyName ?? 'Работодатель';
+    }
     if (account.role === 'STUDENT') {
       const student = await store.students.findByAccountId(account.id);
       profileId = student?.id ?? null;

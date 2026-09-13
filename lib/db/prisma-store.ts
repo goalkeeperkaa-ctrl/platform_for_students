@@ -2,6 +2,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { blindIndex, encrypt } from '@/lib/security/crypto';
 import { hashPassword } from '@/lib/security/password';
+import { readCompanyProfile } from '@/lib/company';
 import { readPortfolio } from '@/lib/portfolio';
 import { prisma } from './prisma-client';
 import { AccountExistsError } from './memory';
@@ -16,6 +17,14 @@ import type { CrmVacancyInput, DataStore, MessageRecord, SyncOutcome } from './t
  */
 function toStudentRecord<T extends Parameters<typeof readPortfolio>[0]>(row: T) {
   return { ...row, ...readPortfolio(row) };
+}
+
+/**
+ * Компания из строки базы: соцсети из JSON и пути к картинкам приводятся
+ * к проверенной форме — чужой путь к файлу отсюда не выйдет наружу.
+ */
+function toEmployerRecord<T extends Parameters<typeof readCompanyProfile>[0]>(row: T) {
+  return { ...row, ...readCompanyProfile(row) };
 }
 
 /** Значение для JSON-колонки; undefined оставляет колонку как есть. */
@@ -150,9 +159,73 @@ export function createPrismaStore(): DataStore {
     },
 
     employers: {
-      findByAccountId: (accountId) => prisma.employer.findUnique({ where: { accountId } }),
-      findById: (id) => prisma.employer.findUnique({ where: { id } }),
-      list: () => prisma.employer.findMany({ orderBy: { companyName: 'asc' } }),
+      async findByAccountId(accountId) {
+        const row = await prisma.employer.findUnique({ where: { accountId } });
+        return row ? toEmployerRecord(row) : null;
+      },
+      async findById(id) {
+        const row = await prisma.employer.findUnique({ where: { id } });
+        return row ? toEmployerRecord(row) : null;
+      },
+      async list() {
+        const rows = await prisma.employer.findMany({ orderBy: { companyName: 'asc' } });
+        return rows.map(toEmployerRecord);
+      },
+      async createWithAccount(input) {
+        const emailHash = blindIndex(input.email);
+        const passwordHash = await hashPassword(input.password);
+        try {
+          const account = await prisma.account.create({
+            data: {
+              role: 'EMPLOYER',
+              emailEnc: encrypt(input.email),
+              emailHash,
+              passwordHash,
+              employer: {
+                create: {
+                  companyName: input.companyName,
+                  contactName: input.contactName,
+                  industry: input.industry,
+                  city: input.city,
+                  // Статус ставит хранилище, а не форма: компания из запроса
+                  // не может объявить себя одобренной
+                  moderationStatus: 'PENDING',
+                  consentVersion: input.consentVersion,
+                  consentAt: new Date(),
+                },
+              },
+            },
+            include: { employer: true },
+          });
+          const { employer, ...rest } = account;
+          if (!employer) throw new Error('Компания не создана');
+          return { account: rest, employer: toEmployerRecord(employer) };
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            throw new AccountExistsError();
+          }
+          throw err;
+        }
+      },
+      async updateProfile(id, input) {
+        const row = await prisma.employer.update({
+          where: { id },
+          data: {
+            companyName: input.companyName,
+            contactName: input.contactName,
+            logoUrl: input.logoUrl,
+            industry: input.industry,
+            about: input.about,
+            culture: input.culture,
+            website: input.website,
+            city: input.city,
+            socials: json(input.socials),
+            photos: input.photos,
+            videoUrl: input.videoUrl,
+          },
+        });
+        return toEmployerRecord(row);
+      },
     },
 
     vacancies: {

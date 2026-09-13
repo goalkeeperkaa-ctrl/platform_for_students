@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { fail, handle, ok, tooManyRequests } from '@/lib/api';
-import { AccountExistsError, getStore } from '@/lib/db';
+import { getStore, isAccountExistsError } from '@/lib/db';
 import { CONSENT_VERSION } from '@/lib/db/seed-data';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
       return ok({ redirectTo: HOME_BY_ROLE.STUDENT }, { status: 201 });
     } catch (err) {
-      if (err instanceof AccountExistsError) {
+      if (isAccountExistsError(err)) {
         return fail(409, 'Аккаунт с такой почтой уже зарегистрирован', 'EMAIL_TAKEN', {
           email: 'Эта почта уже занята',
         });

@@ -79,6 +79,40 @@ export interface StudentPortfolio {
   videoUrl: string | null;
 }
 
+export const MODERATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
+export const MODERATION_STATUS_LABEL: Record<ModerationStatus, string> = {
+  PENDING: 'На модерации',
+  APPROVED: 'Одобрено',
+  REJECTED: 'Отклонено',
+};
+
+/**
+ * Страница компании — то, что студент видит о работодателе помимо вакансии.
+ *
+ * Карточка на доске Miro: название, логотип, отрасль, «о компании»,
+ * сайт и соцсети, фото и видео, что важно в культуре и команде.
+ */
+export interface CompanyProfile {
+  companyName: string;
+  contactName: string;
+  logoUrl: string | null;
+  industry: string | null;
+  about: string | null;
+  culture: string | null;
+  website: string | null;
+  city: string | null;
+  socials: LinkItem[];
+  photos: string[];
+  videoUrl: string | null;
+}
+
+/** Публичная страница компании. Контактного лица здесь нет — это ПДн. */
+export interface CompanyPublicDTO extends Omit<CompanyProfile, 'contactName'> {
+  id: string;
+  activeVacancies: number;
+}
+
 export const WEEKDAY_LABEL: Record<Weekday, string> = {
   MON: 'Пн',
   TUE: 'Вт',
@@ -162,6 +196,11 @@ export interface VacancyDTO {
   id: string;
   title: string;
   company: string;
+  /**
+   * Для ссылки на страницу компании. null — у вакансий витрины на главной:
+   * это демо-выгрузка без записи компании в базе, и ссылке вести некуда.
+   */
+  companyId: string | null;
   companyLogoUrl: string | null;
   summary: string;
   responsibilities: string[];

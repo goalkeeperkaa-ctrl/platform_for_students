@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Вошедшему на форме входа делать нечего
-  if ((pathname === '/login' || pathname === '/register') && session) {
+  if ((pathname === '/login' || pathname === '/register' || pathname.startsWith('/register/')) && session) {
     const url = request.nextUrl.clone();
     url.pathname = HOME_BY_ROLE[session.role];
     url.search = '';

@@ -57,6 +57,12 @@ enum LookingFor {
   PROJECT
 }
 
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum WorkFormat {
   ONSITE
   HYBRID
@@ -193,6 +199,29 @@ model Employer {
   companyName String
   contactName String
   logoUrl     String?
+
+  // Страница компании. Заполняет сама компания после регистрации;
+  // у клиентов из CRM поля пусты, пока агентство их не заполнит.
+  industry String?
+  about    String?  @db.Text
+  culture  String?  @db.Text
+  website  String?
+  city     String?
+  socials  Json     @default("[]")
+  photos   String[] @default([])
+  videoUrl String?
+
+  // Модерация. Компания, зарегистрировавшаяся сама, не видна студентам,
+  // пока её не одобрит HR агентства. Клиенты из CRM уже проверены
+  // договором — поэтому по умолчанию «одобрено».
+  moderationStatus ModerationStatus @default(APPROVED)
+  moderationNote   String?
+  moderatedAt      DateTime?
+
+  // Согласие контактного лица на обработку ПДн при самостоятельной
+  // регистрации. У клиентов из CRM основание — договор, здесь пусто.
+  consentVersion String?
+  consentAt      DateTime?
 
   /// Идентификатор клиента в CRM агентства — ключ синхронизации
   crmClientId String? @unique

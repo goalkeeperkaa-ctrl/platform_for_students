@@ -176,6 +176,14 @@ export const UPLOAD_LIMITS = {
     mime: ['image/jpeg', 'image/png', 'image/webp'],
     label: 'JPG, PNG или WebP до 5 МБ',
   },
+  // Логотип и фото компании. Отдельный вид, а не photo: эти файлы
+  // раздаются публично, а фото студентов — только тем, кому положено.
+  // Смешать их в одном каталоге значит однажды открыть не тот файл.
+  company: {
+    maxBytes: 5 * 1024 * 1024,
+    mime: ['image/jpeg', 'image/png', 'image/webp'],
+    label: 'JPG, PNG или WebP до 5 МБ',
+  },
   resume: {
     maxBytes: 8 * 1024 * 1024,
     mime: [

@@ -39,6 +39,8 @@ async function employerIndex(): Promise<Map<string, EmployerRecord>> {
  * вакансий подряд от одного работодателя выглядят как сбой, поэтому
  * одинаковые компании разводятся по ленте.
  */
+import type { CompanyPublicDTO } from '@/lib/types';
+
 export async function buildFeed(studentId: string, limit = 30): Promise<VacancyDTO[]> {
   const store = await getStore();
   const [student, vacancies, swipedIds, employers] = await Promise.all([
@@ -333,4 +335,36 @@ export async function getStudentProfile(studentId: string) {
   if (!student) return null;
   const account = await store.accounts.findById(student.accountId);
   return toStudentDTO(student, account ? decryptSafe(account.emailEnc) : '');
+}
+
+/**
+ * Публичная страница компании.
+ *
+ * Только одобренная: компания на модерации или отклонённая для студента
+ * и гостя не существует — ответ тот же, что и для несуществующей, чтобы по
+ * нему нельзя было перебирать, кто зарегистрировался.
+ *
+ * Контактного лица здесь нет: это персональные данные, а страница открыта
+ * без входа.
+ */
+export async function getCompanyPublic(employerId: string): Promise<CompanyPublicDTO | null> {
+  const store = await getStore();
+  const employer = await store.employers.findById(employerId);
+  if (!employer || employer.moderationStatus !== 'APPROVED') return null;
+
+  const vacancies = await store.vacancies.listByEmployer(employer.id);
+  return {
+    id: employer.id,
+    companyName: employer.companyName,
+    logoUrl: employer.logoUrl,
+    industry: employer.industry,
+    about: employer.about,
+    culture: employer.culture,
+    website: employer.website,
+    city: employer.city,
+    socials: employer.socials,
+    photos: employer.photos,
+    videoUrl: employer.videoUrl,
+    activeVacancies: vacancies.filter((v) => v.isActive).length,
+  };
 }

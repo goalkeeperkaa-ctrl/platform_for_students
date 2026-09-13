@@ -6,6 +6,7 @@ import {
   CRM_VACANCIES,
   DEMO_APPLICATION_FUNNEL,
   DEMO_CHAT,
+  DEMO_COMPANY_PROFILES,
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
@@ -87,6 +88,11 @@ async function main() {
     });
   }
   console.log(`  вакансий: ${CRM_VACANCIES.length}, работодателей: ${employerByCrmId.size}`);
+
+  // --- Страница демо-компании ---
+  for (const [crmClientId, profile] of Object.entries(DEMO_COMPANY_PROFILES)) {
+    await prisma.employer.updateMany({ where: { crmClientId }, data: profile });
+  }
 
   // --- Код доступа работодателя ---
   const demoEmployer = await prisma.employer.findUnique({

@@ -99,10 +99,10 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         <div className="glass rounded-3xl p-6 sm:p-8">
           <div className="flex rounded-2xl border border-[var(--hairline)] bg-graphite-950/60 p-1">
             <ModeTab active={mode === 'account'} onClick={() => setMode('account')} icon={<User className="size-3.5" />}>
-              Студент и HR
+              По почте
             </ModeTab>
             <ModeTab active={mode === 'code'} onClick={() => setMode('code')} icon={<KeyRound className="size-3.5" />}>
-              Работодатель
+              Код из CRM
             </ModeTab>
           </div>
 
@@ -224,7 +224,13 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         <p className="mt-6 text-center text-[13px] text-paper-faint">
           Ещё нет профиля?{' '}
           <Link href="/register" className="text-paper underline-offset-4 transition-colors hover:underline">
-            Зарегистрироваться
+            Регистрация студента
+          </Link>
+        </p>
+        <p className="mt-1.5 text-center text-[13px] text-paper-faint">
+          Вы работодатель?{' '}
+          <Link href="/register/company" className="text-paper underline-offset-4 transition-colors hover:underline">
+            Зарегистрировать компанию
           </Link>
         </p>
       </motion.div>

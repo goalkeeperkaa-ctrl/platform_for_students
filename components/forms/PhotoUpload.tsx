@@ -17,10 +17,13 @@ import { cn } from '@/lib/utils';
 export function PhotoUpload({
   value,
   onChange,
+  kind = 'photo',
   name,
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
+  /** Вид файла: фото студента или изображение компании (раздаётся публично) */
+  kind?: 'photo' | 'company';
   name: string;
 }) {
   const toast = useToast();
@@ -42,7 +45,7 @@ export function PhotoUpload({
 
       try {
         const body = new FormData();
-        body.append('kind', 'photo');
+        body.append('kind', kind);
         body.append('file', file);
         const response = await fetch('/api/upload', { method: 'POST', body });
         const data = (await response.json()) as { url?: string; error?: string };
@@ -56,7 +59,7 @@ export function PhotoUpload({
         setUploading(false);
       }
     },
-    [onChange, toast],
+    [kind, onChange, toast],
   );
 
   const shown = preview ?? value;

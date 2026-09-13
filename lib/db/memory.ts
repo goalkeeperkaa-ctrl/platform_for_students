@@ -9,6 +9,7 @@ import {
   CRM_VACANCIES,
   DEMO_APPLICATION_FUNNEL,
   DEMO_CHAT,
+  DEMO_COMPANY_PROFILES,
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
@@ -24,6 +25,7 @@ import type {
   DataStore,
   EmployerRecord,
   MessageRecord,
+  NewEmployerInput,
   NewStudentInput,
   StudentRecord,
   SwipeRecord,
@@ -59,6 +61,26 @@ interface Tables {
 
 const clone = <T>(value: T): T => structuredClone(value);
 const now = () => new Date();
+
+/**
+ * Поля страницы компании по умолчанию. Клиент из CRM уже проверен договором,
+ * поэтому одобрен сразу — как и значение по умолчанию в схеме базы.
+ */
+const EMPTY_COMPANY = {
+  industry: null,
+  about: null,
+  culture: null,
+  website: null,
+  city: null,
+  socials: [],
+  photos: [],
+  videoUrl: null,
+  moderationStatus: 'APPROVED' as const,
+  moderationNote: null,
+  moderatedAt: null,
+  consentVersion: null,
+  consentAt: null,
+};
 
 async function seed(): Promise<Tables> {
   const t: Tables = {
@@ -97,12 +119,19 @@ async function seed(): Promise<Tables> {
         contactName: item.contactName,
         logoUrl: null,
         crmClientId: item.crmClientId,
+        ...structuredClone(EMPTY_COMPANY),
         createdAt: now(),
       };
       t.employers.push(employer);
       employerByCrmId.set(item.crmClientId, employer);
     }
     t.vacancies.push(vacancyFromCrm(item, employer.id));
+  }
+
+  // Страница демо-компании, чтобы публичная страница на демо не была пустой
+  for (const employer of t.employers) {
+    const profile = employer.crmClientId ? DEMO_COMPANY_PROFILES[employer.crmClientId] : undefined;
+    if (profile) Object.assign(employer, profile);
   }
 
   // Код доступа работодателя — выдаётся в CRM, паролей у работодателя нет
@@ -468,6 +497,47 @@ export async function createMemoryStore(): Promise<DataStore> {
       async list() {
         return clone(t.employers);
       },
+      async createWithAccount(input: NewEmployerInput) {
+        const emailHash = blindIndex(input.email);
+        if (t.accounts.some((a) => a.emailHash === emailHash)) {
+          throw new AccountExistsError();
+        }
+        const account: AccountRecord = {
+          id: randomUUID(),
+          role: 'EMPLOYER',
+          emailEnc: encrypt(input.email),
+          emailHash,
+          passwordHash: await hashPassword(input.password),
+          isActive: true,
+          lastLoginAt: null,
+          createdAt: now(),
+        };
+        const employer: EmployerRecord = {
+          id: randomUUID(),
+          accountId: account.id,
+          companyName: input.companyName,
+          contactName: input.contactName,
+          logoUrl: null,
+          crmClientId: null,
+          ...structuredClone(EMPTY_COMPANY),
+          industry: input.industry,
+          city: input.city,
+          // Статус ставит хранилище, а не форма
+          moderationStatus: 'PENDING',
+          consentVersion: input.consentVersion,
+          consentAt: now(),
+          createdAt: now(),
+        };
+        t.accounts.push(account);
+        t.employers.push(employer);
+        return { account: clone(account), employer: clone(employer) };
+      },
+      async updateProfile(id, input) {
+        const employer = t.employers.find((e) => e.id === id);
+        if (!employer) throw new Error('Компания не найдена');
+        Object.assign(employer, structuredClone(input));
+        return clone(employer);
+      },
     },
 
     vacancies: {
@@ -513,6 +583,7 @@ export async function createMemoryStore(): Promise<DataStore> {
               contactName: item.contactName,
               logoUrl: null,
               crmClientId: item.crmClientId,
+              ...structuredClone(EMPTY_COMPANY),
               createdAt: now(),
             };
             t.employers.push(employer);
@@ -762,10 +833,22 @@ export async function createMemoryStore(): Promise<DataStore> {
   return store;
 }
 
-/** Отдельный тип ошибки: роут регистрации отличает занятую почту от сбоя. */
+/**
+ * Отдельный тип ошибки: роут регистрации отличает занятую почту от сбоя.
+ *
+ * Узнаётся по коду, а не через instanceof. В dev Next собирает маршруты
+ * раздельно, а хранилище живёт в globalThis из другой копии модуля — класс
+ * ошибки там «чужой», и instanceof молча отвечал false: занятая почта
+ * превращалась в 500 вместо понятного «эта почта уже занята».
+ */
 export class AccountExistsError extends Error {
+  readonly code = 'ACCOUNT_EXISTS';
   constructor() {
     super('Аккаунт с такой почтой уже существует');
     this.name = 'AccountExistsError';
   }
+}
+
+export function isAccountExistsError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ACCOUNT_EXISTS';
 }

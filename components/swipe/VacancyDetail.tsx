@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Clock, Flame, Gift, MapPin, Sparkles, X } from 'lucide-react';
@@ -110,7 +111,16 @@ export function VacancyDetail({
               <header className="flex items-start gap-4">
                 <Avatar name={vacancy.company} src={vacancy.companyLogoUrl} size={52} rounded="square" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-medium text-paper/85">{vacancy.company}</p>
+                  {vacancy.companyId ? (
+                    <Link
+                      href={`/companies/${vacancy.companyId}`}
+                      className="text-[14px] font-medium text-paper/85 underline-offset-4 transition-colors hover:text-paper hover:underline"
+                    >
+                      {vacancy.company}
+                    </Link>
+                  ) : (
+                    <p className="text-[14px] font-medium text-paper/85">{vacancy.company}</p>
+                  )}
                   <p className="mt-1 flex items-center gap-1.5 text-[13px] text-paper-faint">
                     <MapPin className="size-3.5" aria-hidden />
                     {vacancy.city}

@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ChatEmpty, ChatScreen } from '@/components/chat/ChatScreen';
 import { countUnread, getThread, listThreads } from '@/lib/chat';
 import { requireEmployerPage } from '@/lib/security/guards';
+import { employerNav } from '@/lib/employer-nav';
 import { buildEmployerBoard } from '@/lib/services';
 
 export const metadata: Metadata = { title: 'Сообщения · кабинет работодателя' };
@@ -22,10 +23,7 @@ export default async function EmployerMessagesPage({
     countUnread(viewer),
   ]);
 
-  const nav = [
-    { href: '/employer', label: 'Отклики', badge: board.applications.length, exact: true },
-    { href: '/employer/messages', label: 'Сообщения', badge: unread },
-  ];
+  const nav = employerNav(board.applications.length, unread);
 
   const requested = searchParams.thread;
   const valid = requested && threads.some((t) => t.applicationId === requested) ? requested : null;

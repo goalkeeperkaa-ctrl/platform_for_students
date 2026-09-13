@@ -156,6 +156,30 @@ async function main() {
   const reloginWrong = await new Session().post('/api/auth/login', { email, password: 'Smoke12345?' });
   check('чужой пароль к той же почте не подходит', reloginWrong.status === 401, reloginWrong.status);
 
+  // Занятая почта — это 409 с понятной причиной, а не 500: иначе студент
+  // видит «что-то сломалось» и пробует снова, вместо того чтобы войти
+  const duplicate = await new Session().post('/api/auth/register', {
+    fullName: 'Тест Дубликатов',
+    gender: 'MALE',
+    birthYear: 2005,
+    photoUrl: null,
+    university: 'МГУ',
+    speciality: 'Экономика',
+    studyYear: 3,
+    city: 'Москва',
+    workDays: ['MON'],
+    hoursPerWeek: 20,
+    skills: [],
+    about: null,
+    resumeUrl: null,
+    resumeName: null,
+    email,
+    password: 'Smoke12345!',
+    phone: '',
+    consent: true,
+  });
+  check('почту студента нельзя занять повторно', duplicate.status === 409, duplicate.status);
+
   const feed = await student.request('/api/feed');
   const vacancies = feed.body.vacancies as Array<{ id: string; matchScore: number }>;
   check('лента непустая', Array.isArray(vacancies) && vacancies.length > 0);
@@ -560,6 +584,94 @@ async function main() {
     const again = new Session();
     await again.post('/api/auth/login', { email: ownerEmail, password: 'Smoke12345!' });
     await again.delete('/api/students/me', {});
+  }
+
+  // ---------- Компания ----------
+  // Самостоятельная регистрация: кабинет открывается сразу, а публичной
+  // страница становится только после одобрения агентством.
+  console.log('\nКомпания');
+  const companyEmail = `smoke-company-${Date.now()}@demo.ru`;
+  const companyData = {
+    companyName: 'Проверочная Компания',
+    contactName: 'Иван Проверкин',
+    email: companyEmail,
+    password: 'Smoke12345!',
+    industry: 'IT',
+    city: 'Казань',
+    consent: true,
+  };
+  const company = new Session();
+  const companyReg = await company.post('/api/auth/register/company', companyData);
+  check('компания регистрируется сама', companyReg.status === 201, companyReg.body);
+  check('новая компания на модерации', companyReg.body?.moderationStatus === 'PENDING', companyReg.body);
+
+  const companyNoConsent = await new Session().post('/api/auth/register/company', {
+    ...companyData,
+    email: `smoke-company-${Date.now() + 1}@demo.ru`,
+    consent: false,
+  });
+  check('без согласия компанию не регистрируют', companyNoConsent.status === 400, companyNoConsent.status);
+  const companyDup = await new Session().post('/api/auth/register/company', companyData);
+  check('почту компании нельзя занять повторно', companyDup.status === 409, companyDup.status);
+
+  const companyLogin = await new Session().post('/api/auth/login', { email: companyEmail, password: 'Smoke12345!' });
+  check('компания входит по почте и паролю', companyLogin.status === 200 && companyLogin.body?.role === 'EMPLOYER', companyLogin.body);
+  check('кабинет компании открывается', (await company.request('/employer/company')).status === 200);
+
+  const companyId = (await company.request('/api/auth/me')).body.session?.profileId as string;
+  const companyPage = {
+    companyName: 'Проверочная Компания',
+    contactName: 'Иван Проверкин',
+    logoUrl: null,
+    industry: 'IT',
+    about: 'Сервисы для студентов',
+    culture: 'Наставник у каждого стажёра',
+    website: 'https://example.org',
+    city: 'Казань',
+    socials: [{ label: 'VK', url: 'https://example.org/vk' }],
+    photos: [],
+    videoUrl: null,
+  };
+  const companySaved = await company.patch('/api/employer/company', companyPage);
+  check('страница компании сохраняется', companySaved.status === 200, companySaved.body);
+  check('компания на модерации не публична', (await new Session().request(`/companies/${companyId}`)).status === 404);
+
+  const stolen = await company.patch('/api/employer/company', {
+    ...companyPage,
+    logoUrl: '/api/files/photo/00000000-0000-0000-0000-000000000000.jpg',
+  });
+  check('логотипом нельзя сделать чужой файл', stolen.status === 400, stolen.status);
+  const badSite = await company.patch('/api/employer/company', { ...companyPage, website: 'javascript:alert(1)' });
+  check('сайт javascript: отвергнут', badSite.status === 400, badSite.status);
+
+  const crmId = (await employer.request('/api/auth/me')).body.session?.profileId as string;
+  const crmPage = await new Session().request(`/companies/${crmId}`);
+  check('страница одобренной компании открыта гостю', crmPage.status === 200 && String(crmPage.body).includes('Кофейни'), crmPage.status);
+
+  // Картинки компании раздаются публично — загружать их может только кабинет
+  const png = new Uint8Array(
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'),
+  );
+  const uploadForm = () => {
+    const fd = new FormData();
+    fd.append('kind', 'company');
+    fd.append('file', new Blob([png], { type: 'image/png' }), 'logo.png');
+    return fd;
+  };
+  const guestUpload = await fetch(`${BASE}/api/upload`, { method: 'POST', headers: { Origin: BASE }, body: uploadForm() });
+  check('гость не загружает изображения компании', guestUpload.status === 401, guestUpload.status);
+  const companyUpload = await fetch(`${BASE}/api/upload`, {
+    method: 'POST',
+    headers: { Origin: BASE, Cookie: (company as any).cookie },
+    body: uploadForm(),
+  });
+  check('кабинет компании загружает изображение', companyUpload.status === 201, companyUpload.status);
+  if (companyUpload.status === 201) {
+    const { url } = (await companyUpload.json()) as { url: string };
+    const withLogo = await company.patch('/api/employer/company', { ...companyPage, logoUrl: url });
+    check('логотип сохраняется', withLogo.status === 200, withLogo.body);
+    check('логотип компании на модерации гостю не отдаётся', (await fetch(`${BASE}${url}`)).status === 404);
+    check('свой логотип компания видит', (await company.request(url)).status === 200);
   }
 
   // ---------- Перебор пароля ----------

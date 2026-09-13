@@ -16,6 +16,7 @@ export function showcaseVacancies(count = 5): VacancyDTO[] {
       id: `showcase-${index}`,
       title: item.title,
       company: item.companyName,
+      companyId: null,
       companyLogoUrl: null,
       summary: item.summary,
       responsibilities: item.responsibilities,

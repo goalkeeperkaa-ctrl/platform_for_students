@@ -98,6 +98,7 @@ export function toVacancyDTO(
     id: vacancy.id,
     title: vacancy.title,
     company: employer?.companyName ?? 'Работодатель',
+    companyId: vacancy.employerId,
     companyLogoUrl: employer?.logoUrl ?? null,
     summary: vacancy.summary,
     responsibilities: vacancy.responsibilities,

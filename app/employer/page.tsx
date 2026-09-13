@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { EmployerBoard } from '@/components/screens/EmployerBoard';
 import { countUnread } from '@/lib/chat';
 import { requireEmployerPage } from '@/lib/security/guards';
+import { employerNav } from '@/lib/employer-nav';
 import { buildEmployerBoard } from '@/lib/services';
 
 export const metadata: Metadata = { title: 'Кабинет работодателя' };
@@ -18,10 +19,7 @@ export default async function EmployerPage() {
   return (
     <AppShell
       user={{ name: employer.companyName, subtitle: employer.contactName }}
-      nav={[
-        { href: '/employer', label: 'Отклики', badge: board.applications.length, exact: true },
-        { href: '/employer/messages', label: 'Сообщения', badge: unread },
-      ]}
+      nav={employerNav(board.applications.length, unread)}
     >
       <EmployerBoard board={board} />
     </AppShell>

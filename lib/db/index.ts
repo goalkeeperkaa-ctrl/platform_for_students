@@ -58,4 +58,4 @@ export function isDemoMode(): boolean {
 }
 
 export type { DataStore } from './types';
-export { AccountExistsError } from './memory';
+export { AccountExistsError, isAccountExistsError } from './memory';
