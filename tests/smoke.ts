@@ -900,6 +900,33 @@ async function main() {
   await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
   check('после повторного одобрения вакансия снова в ленте', await inFeed());
 
+  // Финальный тест с доски Miro: студент откликается на вакансию компании,
+  // которая зарегистрировалась сама, — компания видит отклик и отвечает
+  // студенту, и никому не нужна помощь разработчика
+  const finalSwipe = await student.post('/api/swipes', { vacancyId, direction: 'RIGHT' });
+  check('финальный тест: студент откликается на вакансию новой компании', finalSwipe.status === 200 && finalSwipe.body?.applied === true, finalSwipe.body);
+  const companyBoard = ((await company.request('/api/employer/applications')).body?.applications ?? []) as Array<{
+    id: string;
+    vacancyId: string;
+    status: string;
+  }>;
+  const finalApplication = companyBoard.find((a) => a.vacancyId === vacancyId);
+  check('финальный тест: отклик появился в кабинете компании', !!finalApplication, companyBoard.length);
+  if (finalApplication) {
+    const invited = await company.patch('/api/employer/applications', { applicationId: finalApplication.id, status: 'INVITED' });
+    check('финальный тест: компания приглашает студента', invited.status === 200, invited.body);
+    const studentApps = ((await student.request('/api/applications')).body?.applications ?? []) as Array<{ id: string; status: string }>;
+    check('финальный тест: студент видит приглашение', studentApps.some((a) => a.id === finalApplication.id && a.status === 'INVITED'));
+    const hello = await company.post(`/api/messages/${finalApplication.id}`, { body: 'Здравствуйте! Приглашаем на знакомство в среду.' });
+    check('финальный тест: компания пишет студенту', hello.status === 201, hello.body);
+    const thread = await student.request(`/api/messages/${finalApplication.id}`);
+    check(
+      'финальный тест: студент получает сообщение',
+      thread.status === 200 && JSON.stringify(thread.body).includes('Приглашаем на знакомство'),
+      thread.status,
+    );
+  }
+
   const renamedCompany = await company.patch('/api/employer/company', { ...companyPage, companyName: 'Проверочная Компания Плюс' });
   check(
     'смена названия возвращает компанию на проверку',
@@ -953,6 +980,7 @@ async function main() {
   const eventTypes = ((pilot.body?.events ?? []) as Array<{ type: string }>).map((e) => e.type);
   check('в журнале есть публикация вакансии', eventTypes.includes('vacancy.published'), eventTypes.slice(0, 12));
   check('в журнале есть регистрация компании', eventTypes.includes('company.registered'), eventTypes.slice(0, 12));
+  check('в журнале есть следующий шаг по отклику', eventTypes.includes('application.next_step'), eventTypes.slice(0, 12));
   if (freshApplication) check('в журнале есть просмотр профиля', eventTypes.includes('profile.viewed'), eventTypes.slice(0, 12));
   if (severVacancy) check('в журнале есть отклик', eventTypes.includes('application.created'), eventTypes.slice(0, 12));
   check('страница метрик пилота открывается', (await admin.request('/admin/pilot')).status === 200);
