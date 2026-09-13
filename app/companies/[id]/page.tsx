@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { getCompanyPublic } from '@/lib/services';
 import { plural } from '@/lib/utils';
+import { EMPLOYMENT_TYPE_LABEL } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -107,22 +108,36 @@ export default async function CompanyPage({ params }: Props) {
           </section>
         )}
 
-        <section className="glass mt-6 flex flex-col items-start gap-4 rounded-3xl p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
-          <p className="text-[15px] text-paper">
-            {company.activeVacancies > 0 ? (
-              <>
-                <span className="font-semibold">{company.activeVacancies}</span>{' '}
-                {plural(company.activeVacancies, 'открытая вакансия', 'открытые вакансии', 'открытых вакансий')}
-              </>
-            ) : (
-              'Открытых вакансий сейчас нет'
-            )}
-          </p>
-          <Link href="/feed">
-            <Button variant="accent" size="md">
-              Смотреть вакансии
-            </Button>
-          </Link>
+        <section className="glass mt-6 rounded-3xl p-6 sm:p-8">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[15px] text-paper">
+              {company.activeVacancies > 0 ? (
+                <>
+                  <span className="font-semibold">{company.activeVacancies}</span>{' '}
+                  {plural(company.activeVacancies, 'открытая вакансия', 'открытые вакансии', 'открытых вакансий')}
+                </>
+              ) : (
+                'Открытых вакансий сейчас нет'
+              )}
+            </p>
+            <Link href="/feed">
+              <Button variant="accent" size="md">
+                Смотреть вакансии
+              </Button>
+            </Link>
+          </div>
+          {company.vacancies.length > 0 && (
+            <ul className="mt-5 divide-y divide-[var(--hairline)] border-t border-[var(--hairline)]">
+              {company.vacancies.map((vacancy) => (
+                <li key={vacancy.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
+                  <span className="min-w-0 break-words text-[14.5px] text-paper">{vacancy.title}</span>
+                  <span className="text-[12.5px] text-paper-faint">
+                    {vacancy.city} · {EMPLOYMENT_TYPE_LABEL[vacancy.employmentType]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </main>
     </div>

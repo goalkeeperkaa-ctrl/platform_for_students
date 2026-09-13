@@ -24,6 +24,7 @@ export default async function EmployerCompanyPage() {
       <CompanyEditor
         companyId={employer.id}
         moderation={{ status: employer.moderationStatus, note: employer.moderationNote }}
+        selfRegistered={employer.crmClientId === null}
         initial={{
           companyName: employer.companyName,
           contactName: employer.contactName,

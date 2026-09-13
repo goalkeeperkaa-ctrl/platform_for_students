@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, CheckCircle2, RefreshCw, ScrollText } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, RefreshCw, ScrollText, ShieldAlert } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { ApplicationStatusPill, StudentStatusPill } from '@/components/ui/StatusPill';
@@ -112,6 +113,22 @@ export function AdminDashboard({
           {syncing ? 'Синхронизируем…' : 'Синхронизировать вакансии'}
         </Button>
       </header>
+
+      {/* ---------- МОДЕРАЦИЯ ---------- */}
+      {stats.moderation.companies + stats.moderation.vacancies > 0 && (
+        <Link
+          href="/admin/moderation"
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warn/35 bg-warn/[0.08] p-4 transition-colors hover:bg-warn/[0.12]"
+        >
+          <span className="flex items-center gap-2 text-[13.5px] text-paper">
+            <ShieldAlert className="size-4 shrink-0 text-warn" aria-hidden />
+            Ждут проверки: {stats.moderation.companies}{' '}
+            {plural(stats.moderation.companies, 'компания', 'компании', 'компаний')},{' '}
+            {stats.moderation.vacancies} {plural(stats.moderation.vacancies, 'вакансия', 'вакансии', 'вакансий')}
+          </span>
+          <span className="text-[13px] text-paper/80">Открыть очередь →</span>
+        </Link>
+      )}
 
       {/* ---------- KPI ---------- */}
       <Stagger className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-[var(--hairline)] bg-[var(--hairline)] lg:grid-cols-4" inView={false}>

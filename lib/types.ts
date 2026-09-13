@@ -88,6 +88,21 @@ export const MODERATION_STATUS_LABEL: Record<ModerationStatus, string> = {
 };
 
 /**
+ * Путь вакансии из кабинета компании: черновик → на проверке →
+ * опубликована, отклонена или снята. Вакансии из CRM приходят сразу
+ * опубликованными — их проверило агентство.
+ */
+export const VACANCY_STATUSES = ['DRAFT', 'PENDING', 'PUBLISHED', 'REJECTED', 'CLOSED'] as const;
+export type VacancyStatus = (typeof VACANCY_STATUSES)[number];
+export const VACANCY_STATUS_LABEL: Record<VacancyStatus, string> = {
+  DRAFT: 'Черновик',
+  PENDING: 'На проверке',
+  PUBLISHED: 'Опубликована',
+  REJECTED: 'Отклонена',
+  CLOSED: 'Снята',
+};
+
+/**
  * Страница компании — то, что студент видит о работодателе помимо вакансии.
  *
  * Карточка на доске Miro: название, логотип, отрасль, «о компании»,
@@ -111,6 +126,8 @@ export interface CompanyProfile {
 export interface CompanyPublicDTO extends Omit<CompanyProfile, 'contactName'> {
   id: string;
   activeVacancies: number;
+  /** Открытые вакансии — только те, что видит студент */
+  vacancies: Array<{ id: string; title: string; city: string; employmentType: EmploymentType }>;
 }
 
 export const WEEKDAY_LABEL: Record<Weekday, string> = {
@@ -141,6 +158,15 @@ export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = {
   PROJECT: 'Проект',
   INTERNSHIP: 'Стажировка',
   FULL_TIME: 'Полный день',
+};
+
+export const SALARY_PERIODS = ['MONTH', 'SHIFT', 'HOUR'] as const;
+export type SalaryPeriod = (typeof SALARY_PERIODS)[number];
+
+export const SALARY_PERIOD_LABEL: Record<SalaryPeriod, string> = {
+  MONTH: 'в месяц',
+  SHIFT: 'за смену',
+  HOUR: 'в час',
 };
 
 export const SWIPE_DIRECTIONS = ['RIGHT', 'LEFT'] as const;
@@ -206,6 +232,12 @@ export interface VacancyDTO {
   responsibilities: string[];
   requirements: string[];
   perks: string[];
+  /** Чему научится студент — карточка вакансии v0.1 с доски Miro */
+  learnings: string[];
+  /** С кем предстоит работать: команда, наставник, руководитель */
+  team: string | null;
+  photos: string[];
+  videoUrl: string | null;
   salaryFrom: number | null;
   salaryTo: number | null;
   salaryPeriod: 'MONTH' | 'SHIFT' | 'HOUR';
@@ -303,6 +335,46 @@ export interface AdminStats {
     updatedAt: string;
   }>;
   lastSync: SyncRunDTO | null;
+  /** Ждут решения HR: компании, зарегистрированные сами, и вакансии из кабинетов */
+  moderation: { companies: number; vacancies: number };
+}
+
+/** Вакансия в кабинете компании — все статусы, с числом откликов. */
+export interface EmployerVacancyDTO {
+  id: string;
+  title: string;
+  status: VacancyStatus;
+  /** Вакансию из CRM кабинет не меняет — её ведёт агентство */
+  fromCrm: boolean;
+  /** Причина отказа — только у отклонённой */
+  moderationNote: string | null;
+  applications: number;
+  city: string;
+  employmentType: EmploymentType;
+  updatedAt: string;
+}
+
+/** Компания в очереди модерации. Почту видит только HR. */
+export interface ModerationCompanyDTO {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  logoUrl: string | null;
+  industry: string | null;
+  city: string | null;
+  about: string | null;
+  website: string | null;
+  createdAt: string;
+  pendingVacancies: number;
+}
+
+/** Вакансия в очереди модерации — в том виде, в каком её увидит студент. */
+export interface ModerationVacancyDTO {
+  companyId: string;
+  companyStatus: ModerationStatus;
+  submittedAt: string;
+  vacancy: VacancyDTO;
 }
 
 export interface SyncRunDTO {

@@ -3,6 +3,7 @@ import { getStore } from '@/lib/db';
 import { scoreMatch, studentName, toStudentDTO, toVacancyDTO } from '@/lib/db/mappers';
 import { decryptSafe } from '@/lib/security/crypto';
 import type { EmployerRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
+import { isVacancyVisible } from '@/lib/vacancy';
 import {
   APPLICATION_STATUSES,
   STUDENT_STATUSES,
@@ -11,6 +12,9 @@ import {
   type ApplicationStatus,
   type AuditEntryDTO,
   type EmployerApplicationDTO,
+  type EmployerVacancyDTO,
+  type ModerationCompanyDTO,
+  type ModerationVacancyDTO,
   type SkippedDTO,
   type StudentStatus,
   type SyncRunDTO,
@@ -202,25 +206,29 @@ export async function buildEmployerBoard(employerId: string): Promise<EmployerBo
 
   return {
     company: employer?.companyName ?? 'Работодатель',
-    vacancies: vacancies.map((v) => ({
-      id: v.id,
-      title: v.title,
-      isActive: v.isActive,
-      total: items.filter((i) => i.vacancyId === v.id).length,
-    })),
+    // Черновик откликов не собирает — в фильтре откликов ему не место
+    vacancies: vacancies
+      .filter((v) => v.status !== 'DRAFT')
+      .map((v) => ({
+        id: v.id,
+        title: v.title,
+        isActive: v.isActive,
+        total: items.filter((i) => i.vacancyId === v.id).length,
+      })),
     applications: items,
   };
 }
 
 export async function buildAdminStats(): Promise<AdminStats> {
   const store = await getStore();
-  const [students, applications, swipes, vacancyCounts, employers, lastSync] = await Promise.all([
+  const [students, applications, swipes, vacancyCounts, employers, lastSync, pendingVacancies] = await Promise.all([
     store.students.list(),
     store.applications.listAll(),
     store.swipes.countByDirection(),
     store.vacancies.countAll(),
     employerIndex(),
     store.syncRuns.latest(),
+    store.vacancies.listByStatus('PENDING'),
   ]);
 
   const byStudentStatus = Object.fromEntries(
@@ -280,6 +288,10 @@ export async function buildAdminStats(): Promise<AdminStats> {
       conversion: applications.length ? Math.round((hired / applications.length) * 100) : 0,
     },
     vacancies: vacancyCounts,
+    moderation: {
+      companies: Array.from(employers.values()).filter((e) => e.moderationStatus === 'PENDING').length,
+      vacancies: pendingVacancies.length,
+    },
     inProgress,
     lastSync: lastSync ? toSyncRunDTO(lastSync) : null,
   };
@@ -352,7 +364,8 @@ export async function getCompanyPublic(employerId: string): Promise<CompanyPubli
   const employer = await store.employers.findById(employerId);
   if (!employer || employer.moderationStatus !== 'APPROVED') return null;
 
-  const vacancies = await store.vacancies.listByEmployer(employer.id);
+  // Та же видимость, что у ленты: вакансия на проверке и снятая не считаются
+  const open = (await store.vacancies.listByEmployer(employer.id)).filter((v) => isVacancyVisible(v, employer));
   return {
     id: employer.id,
     companyName: employer.companyName,
@@ -365,6 +378,97 @@ export async function getCompanyPublic(employerId: string): Promise<CompanyPubli
     socials: employer.socials,
     photos: employer.photos,
     videoUrl: employer.videoUrl,
-    activeVacancies: vacancies.filter((v) => v.isActive).length,
+    activeVacancies: open.length,
+    vacancies: open.map((v) => ({ id: v.id, title: v.title, city: v.city, employmentType: v.employmentType })),
   };
+}
+
+/**
+ * Вакансии своей компании для кабинета — все статусы, с числом откликов.
+ *
+ * Вакансия из CRM, закрытая в CRM, показывается снятой: статус модерации у
+ * неё «опубликована», но студент её уже не видит, и кабинет не должен
+ * утверждать обратное.
+ */
+export async function listEmployerVacancies(employerId: string): Promise<EmployerVacancyDTO[]> {
+  const store = await getStore();
+  const vacancies = await store.vacancies.listByEmployer(employerId);
+  const applications = await store.applications.listByVacancyIds(vacancies.map((v) => v.id));
+  const counts = new Map<string, number>();
+  for (const a of applications) counts.set(a.vacancyId, (counts.get(a.vacancyId) ?? 0) + 1);
+
+  return vacancies
+    .sort((a, b) => +b.updatedAt - +a.updatedAt)
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      status: v.status === 'PUBLISHED' && !v.isActive ? 'CLOSED' : v.status,
+      fromCrm: v.crmId !== null,
+      moderationNote: v.status === 'REJECTED' ? v.moderationNote : null,
+      applications: counts.get(v.id) ?? 0,
+      city: v.city,
+      employmentType: v.employmentType,
+      updatedAt: v.updatedAt.toISOString(),
+    }));
+}
+
+/** Своя вакансия для формы. Чужая — null, как несуществующая. */
+export async function getEmployerVacancy(employerId: string, id: string): Promise<VacancyRecord | null> {
+  const store = await getStore();
+  const vacancy = await store.vacancies.findById(id);
+  return vacancy && vacancy.employerId === employerId ? vacancy : null;
+}
+
+export interface ModerationQueue {
+  companies: ModerationCompanyDTO[];
+  vacancies: ModerationVacancyDTO[];
+}
+
+/**
+ * Очередь модерации: компании, зарегистрированные сами, и вакансии из
+ * кабинетов. Старые заявки первыми — кто дольше ждёт, того и смотрят.
+ *
+ * Почту контактного лица HR видит: без неё не уточнить, что за компания,
+ * а администратору и так доступны все данные.
+ */
+export async function buildModerationQueue(): Promise<ModerationQueue> {
+  const store = await getStore();
+  const [employers, pending] = await Promise.all([store.employers.list(), store.vacancies.listByStatus('PENDING')]);
+  const employerById = new Map(employers.map((e) => [e.id, e]));
+
+  const companies: ModerationCompanyDTO[] = [];
+  const waiting = employers.filter((e) => e.moderationStatus === 'PENDING').sort((a, b) => +a.createdAt - +b.createdAt);
+  for (const employer of waiting) {
+    const account = await store.accounts.findById(employer.accountId);
+    companies.push({
+      id: employer.id,
+      companyName: employer.companyName,
+      contactName: employer.contactName,
+      email: account ? decryptSafe(account.emailEnc) : '',
+      logoUrl: employer.logoUrl,
+      industry: employer.industry,
+      city: employer.city,
+      about: employer.about,
+      website: employer.website,
+      createdAt: employer.createdAt.toISOString(),
+      pendingVacancies: pending.filter((v) => v.employerId === employer.id).length,
+    });
+  }
+
+  const vacancies = pending.flatMap((vacancy): ModerationVacancyDTO[] => {
+    const employer = employerById.get(vacancy.employerId);
+    if (!employer) return [];
+    const dto = toVacancyDTO(vacancy, employer);
+    return [
+      {
+        companyId: employer.id,
+        companyStatus: employer.moderationStatus,
+        submittedAt: (vacancy.submittedAt ?? vacancy.updatedAt).toISOString(),
+        // Страница неодобренной компании не публична — ссылке из карточки вести некуда
+        vacancy: employer.moderationStatus === 'APPROVED' ? dto : { ...dto, companyId: null },
+      },
+    ];
+  });
+
+  return { companies, vacancies };
 }

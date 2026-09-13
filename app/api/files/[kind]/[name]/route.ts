@@ -3,6 +3,7 @@ import { fail, handle } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { getSession } from '@/lib/security/guards';
 import { readStored } from '@/lib/storage';
+import { isVacancyVisible } from '@/lib/vacancy';
 import type { SessionUser } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -52,13 +53,23 @@ export async function GET(
 async function readCompanyFile(session: SessionUser | null, name: string) {
   const url = `/api/files/company/${name}`;
   const store = await getStore();
-  const owner = (await store.employers.list()).find(
-    (e) => e.logoUrl === url || e.photos.includes(url),
-  );
+  const employers = await store.employers.list();
+  let owner = employers.find((e) => e.logoUrl === url || e.photos.includes(url));
+  let isPublic = owner?.moderationStatus === 'APPROVED';
+
+  if (!owner) {
+    // Фото вакансии публично ровно тогда, когда видна хотя бы одна вакансия
+    // с ним: черновик и вакансия на проверке своих фото не раскрывают, но и
+    // не прячут фото, которое стоит ещё и в опубликованной
+    const vacancies = await store.vacancies.listByPhoto(url);
+    if (vacancies.length > 0) {
+      owner = employers.find((e) => e.id === vacancies[0].employerId);
+      isPublic = vacancies.some((v) => isVacancyVisible(v, employers.find((e) => e.id === v.employerId)));
+    }
+  }
 
   const isOwner = !!owner && !!session && session.role === 'EMPLOYER' && session.accountId === owner.accountId;
   const isAdmin = session?.role === 'ADMIN';
-  const isPublic = owner?.moderationStatus === 'APPROVED';
 
   // Файл, который ни одна компания не использует, гостю не отдаётся:
   // иначе загрузка превращалась бы в бесплатный публичный хостинг картинок

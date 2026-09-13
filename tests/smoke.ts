@@ -674,6 +674,185 @@ async function main() {
     check('свой логотип компания видит', (await company.request(url)).status === 200);
   }
 
+  // ---------- Вакансии из кабинета и модерация ----------
+  console.log('\nВакансии и модерация');
+  const photoUpload = await fetch(`${BASE}/api/upload`, {
+    method: 'POST',
+    headers: { Origin: BASE, Cookie: (company as any).cookie },
+    body: uploadForm(),
+  });
+  const vacancyPhoto = photoUpload.status === 201 ? ((await photoUpload.json()) as { url: string }).url : null;
+  check('фото для вакансии загружается', !!vacancyPhoto, photoUpload.status);
+
+  const vacancyForm = {
+    title: 'Стажёр-аналитик',
+    summary: 'Помогать команде разбирать данные о студентах и готовить отчёты.',
+    responsibilities: ['Собирать выгрузки', 'Готовить еженедельный отчёт'],
+    requirements: ['Excel'],
+    perks: ['Гибкий график'],
+    learnings: ['SQL на реальных данных'],
+    team: 'Аналитик-наставник и два стажёра',
+    salaryFrom: 30000,
+    salaryTo: 45000,
+    salaryPeriod: 'MONTH',
+    city: 'Казань',
+    district: null,
+    workFormat: 'HYBRID',
+    employmentType: 'INTERNSHIP',
+    shiftDays: ['MON', 'WED', 'FRI'],
+    hoursPerWeek: 20,
+    tags: ['Excel', 'SQL'],
+    photos: vacancyPhoto ? [vacancyPhoto] : [],
+    videoUrl: null,
+  };
+  check('гость не создаёт вакансию', (await new Session().post('/api/employer/vacancies', vacancyForm)).status === 401);
+  check('студент не создаёт вакансию', (await student.post('/api/employer/vacancies', vacancyForm)).status === 401);
+
+  const draft = await company.post('/api/employer/vacancies', vacancyForm);
+  check('черновик вакансии сохраняется', draft.status === 201 && draft.body?.status === 'DRAFT', draft.body);
+  const vacancyId = String(draft.body?.id);
+  const sneaky = await company.post('/api/employer/vacancies', { ...vacancyForm, status: 'PUBLISHED', isActive: true });
+  check('опубликовать в обход проверки нельзя', sneaky.status === 201 && sneaky.body?.status === 'DRAFT', sneaky.body);
+
+  const badSalary = await company.post('/api/employer/vacancies', { ...vacancyForm, salaryFrom: 50000, salaryTo: 10000 });
+  check('зарплата «до» меньше «от» отвергнута', badSalary.status === 400 && !!badSalary.body?.fields?.salaryTo, badSalary.body);
+  const badVideo = await company.post('/api/employer/vacancies', { ...vacancyForm, videoUrl: 'javascript:alert(1)' });
+  check('видео вакансии javascript: отвергнуто', badVideo.status === 400, badVideo.status);
+  const foreignPhoto = await company.post('/api/employer/vacancies', {
+    ...vacancyForm,
+    photos: ['/api/files/photo/00000000-0000-0000-0000-000000000000.jpg'],
+  });
+  check('фото вакансии — только файлы компании', foreignPhoto.status === 400, foreignPhoto.status);
+  const noDays = await company.post('/api/employer/vacancies', { ...vacancyForm, shiftDays: [] });
+  check('вакансия без дней смен отвергнута', noDays.status === 400, noDays.status);
+
+  check('раздел вакансий открывается', (await company.request('/employer/vacancies')).status === 200);
+  check('форма новой вакансии открывается', (await company.request('/employer/vacancies/new')).status === 200);
+  check('своя вакансия открывается на правку', (await company.request(`/employer/vacancies/${vacancyId}`)).status === 200);
+  // Кабинет стримится через loading.tsx, поэтому notFound() приходит
+  // страницей «не найдено» со статусом 200 — проверяем содержимое, а не код
+  const foreignEdit = await employer.request(`/employer/vacancies/${vacancyId}`);
+  const foreignEditBody = String(foreignEdit.body);
+  check(
+    'чужая вакансия на правку не открывается',
+    (foreignEdit.status === 404 || foreignEditBody.includes('NEXT_NOT_FOUND')) &&
+      !foreignEditBody.includes('Стажёр-аналитик'),
+    foreignEdit.status,
+  );
+  if (vacancyPhoto) check('фото черновика гостю не отдаётся', (await fetch(`${BASE}${vacancyPhoto}`)).status === 404);
+
+  const submitted = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'submit' });
+  check('вакансия уходит на проверку', submitted.status === 200 && submitted.body?.status === 'PENDING', submitted.body);
+
+  const inFeed = async () => {
+    const feed = await student.request('/api/feed');
+    return ((feed.body?.vacancies ?? []) as Array<{ id: string }>).some((v) => v.id === vacancyId);
+  };
+  check('вакансия на проверке не в ленте', !(await inFeed()));
+  check('чужую вакансию не изменить', (await employer.patch(`/api/employer/vacancies/${vacancyId}`, vacancyForm)).status === 404);
+  check('чужую вакансию не снять', (await employer.post(`/api/employer/vacancies/${vacancyId}`, { action: 'close' })).status === 404);
+
+  check('студенту модерация закрыта', (await student.request('/api/admin/moderation')).status === 401);
+  check(
+    'компании модерация закрыта',
+    (await company.post('/api/admin/moderation', { entity: 'company', id: companyId, decision: 'APPROVE' })).status === 401,
+  );
+
+  const queue = await admin.request('/api/admin/moderation');
+  check(
+    'компания в очереди модерации',
+    queue.status === 200 && ((queue.body?.companies ?? []) as Array<{ id: string }>).some((c) => c.id === companyId),
+    queue.status,
+  );
+  check(
+    'вакансия в очереди модерации',
+    ((queue.body?.vacancies ?? []) as Array<{ vacancy: { id: string } }>).some((v) => v.vacancy.id === vacancyId),
+  );
+  check('страница модерации открывается', (await admin.request('/admin/moderation')).status === 200);
+  const statsBody = (await admin.request('/api/admin/stats')).body;
+  const moderationStats = statsBody?.moderation ?? statsBody?.stats?.moderation;
+  check('в статистике есть очередь модерации', typeof moderationStats?.vacancies === 'number', statsBody);
+
+  const earlyApprove = await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
+  check('вакансию не одобрить раньше компании', earlyApprove.status === 409, earlyApprove.body);
+  const silentReject = await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'REJECT' });
+  check('отказ без причины не принимается', silentReject.status === 400, silentReject.status);
+  const rejected = await admin.post('/api/admin/moderation', {
+    entity: 'vacancy',
+    id: vacancyId,
+    decision: 'REJECT',
+    note: 'Уточните обязанности стажёра',
+  });
+  check('вакансия отклоняется с причиной', rejected.status === 200 && rejected.body?.status === 'REJECTED', rejected.body);
+  const ownList = (await company.request('/api/employer/vacancies')).body?.vacancies ?? [];
+  const listed = (ownList as Array<{ id: string; status: string; moderationNote: string | null }>).find((v) => v.id === vacancyId);
+  check(
+    'причина отказа видна компании',
+    listed?.status === 'REJECTED' && listed?.moderationNote === 'Уточните обязанности стажёра',
+    listed,
+  );
+
+  const resubmitted = await company.patch(`/api/employer/vacancies/${vacancyId}`, {
+    ...vacancyForm,
+    responsibilities: ['Собирать выгрузки из CRM', 'Готовить еженедельный отчёт'],
+    submit: true,
+  });
+  check('исправленная вакансия снова на проверке', resubmitted.status === 200 && resubmitted.body?.status === 'PENDING', resubmitted.body);
+
+  const companyApproved = await admin.post('/api/admin/moderation', { entity: 'company', id: companyId, decision: 'APPROVE' });
+  check('компания одобряется', companyApproved.status === 200 && companyApproved.body?.status === 'APPROVED', companyApproved.body);
+  check('одобренная компания открыта гостю', (await new Session().request(`/companies/${companyId}`)).status === 200);
+  const vacancyApproved = await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
+  check('вакансия одобряется', vacancyApproved.status === 200 && vacancyApproved.body?.status === 'PUBLISHED', vacancyApproved.body);
+  check('одобренная вакансия в ленте', await inFeed());
+  const twice = await admin.post('/api/admin/moderation', {
+    entity: 'vacancy',
+    id: vacancyId,
+    decision: 'REJECT',
+    note: 'Повторное решение',
+  });
+  check('повторное решение по вакансии отвергнуто', twice.status === 409, twice.status);
+  if (vacancyPhoto) check('фото опубликованной вакансии открыто', (await fetch(`${BASE}${vacancyPhoto}`)).status === 200);
+
+  const feedCard = (((await student.request('/api/feed')).body?.vacancies ?? []) as Array<Record<string, any>>).find(
+    (v) => v.id === vacancyId,
+  );
+  check(
+    'в карточке «чему научитесь» и команда',
+    feedCard?.learnings?.[0] === 'SQL на реальных данных' && feedCard?.team === 'Аналитик-наставник и два стажёра',
+    feedCard,
+  );
+  const publicCompany = await new Session().request(`/companies/${companyId}`);
+  check('вакансия видна на странице компании', String(publicCompany.body).includes('Стажёр-аналитик'), publicCompany.status);
+
+  const edited = await company.patch(`/api/employer/vacancies/${vacancyId}`, { ...vacancyForm, title: 'Стажёр-аналитик данных' });
+  check('правка опубликованной вакансии отправляет её на проверку', edited.status === 200 && edited.body?.status === 'PENDING', edited.body);
+  check('после правки вакансии нет в ленте', !(await inFeed()));
+  await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
+  check('после повторного одобрения вакансия снова в ленте', await inFeed());
+
+  const renamedCompany = await company.patch('/api/employer/company', { ...companyPage, companyName: 'Проверочная Компания Плюс' });
+  check(
+    'смена названия возвращает компанию на проверку',
+    renamedCompany.status === 200 && renamedCompany.body?.moderationStatus === 'PENDING',
+    renamedCompany.body,
+  );
+  check('вакансии компании на проверке нет в ленте', !(await inFeed()));
+  const hiddenSwipe = await student.post('/api/swipes', { vacancyId, direction: 'RIGHT' });
+  check('откликнуться на скрытую вакансию нельзя', hiddenSwipe.status === 404, hiddenSwipe.status);
+  if (vacancyPhoto) check('фото вакансии скрытой компании гостю не отдаётся', (await fetch(`${BASE}${vacancyPhoto}`)).status === 404);
+
+  const closedVacancy = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'close' });
+  check('вакансия снимается', closedVacancy.status === 200 && closedVacancy.body?.status === 'CLOSED', closedVacancy.body);
+
+  const crmVacancies = ((await employer.request('/api/employer/vacancies')).body?.vacancies ?? []) as Array<{ id: string; fromCrm: boolean }>;
+  const crmVacancy = crmVacancies.find((v) => v.fromCrm);
+  check('клиент CRM видит свои вакансии в кабинете', !!crmVacancy, crmVacancies.length);
+  if (crmVacancy) {
+    const crmEdit = await employer.patch(`/api/employer/vacancies/${crmVacancy.id}`, vacancyForm);
+    check('вакансию из CRM из кабинета не изменить', crmEdit.status === 409, crmEdit.status);
+  }
+
   // ---------- Перебор пароля ----------
   // Порог висит на учётной записи, а не только на адресе: за одним IP
   // сидит целый кампус, и рубить их всех из-за одного подборщика нельзя.

@@ -2,8 +2,10 @@ import { cn } from '@/lib/utils';
 import {
   APPLICATION_STATUS_LABEL,
   STUDENT_STATUS_LABEL,
+  VACANCY_STATUS_LABEL,
   type ApplicationStatus,
   type StudentStatus,
+  type VacancyStatus,
 } from '@/lib/types';
 
 /**
@@ -60,6 +62,22 @@ export function StudentStatusPill({
       {STUDENT_STATUS_LABEL[status]}
     </span>
   );
+}
+
+/**
+ * Статус вакансии в кабинете. Жёлтый — ждёт чужого решения, красный —
+ * нужно действие компании, зелёный — вакансия работает.
+ */
+const VACANCY_TONE: Record<VacancyStatus, string> = {
+  DRAFT: 'border-[var(--hairline-strong)] bg-paper/[0.05] text-paper/70',
+  PENDING: 'border-warn/40 bg-warn/12 text-warn',
+  PUBLISHED: 'border-yes/45 bg-yes/14 text-yes-glow',
+  REJECTED: 'border-danger/40 bg-danger/15 text-danger',
+  CLOSED: 'border-[var(--hairline)] bg-paper/[0.03] text-paper-faint',
+};
+
+export function VacancyStatusPill({ status, className }: { status: VacancyStatus; className?: string }) {
+  return <span className={cn(base, VACANCY_TONE[status], className)}>{VACANCY_STATUS_LABEL[status]}</span>;
 }
 
 /** Пульсирует только у новых откликов — то, что ещё никто не открыл. */

@@ -2,6 +2,7 @@ import { fail, handle, ok, tooManyRequests } from '@/lib/api';
 import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { rateLimit } from '@/lib/security/rate-limit';
 import { swipeSchema, undoSwipeSchema } from '@/lib/validation';
+import { isVacancyVisible } from '@/lib/vacancy';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +25,10 @@ export async function POST(request: Request) {
     const { vacancyId, direction } = swipeSchema.parse(await request.json());
 
     const vacancy = await store.vacancies.findById(vacancyId);
-    if (!vacancy || !vacancy.isActive) {
+    // Та же проверка, что у ленты: вакансия на проверке или у компании,
+    // которую вернули на модерацию, для студента не существует
+    const employer = vacancy ? await store.employers.findById(vacancy.employerId) : null;
+    if (!vacancy || !isVacancyVisible(vacancy, employer)) {
       return fail(404, 'Вакансия больше не активна', 'VACANCY_GONE');
     }
 

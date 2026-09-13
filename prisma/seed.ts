@@ -10,6 +10,7 @@ import {
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
+  DEMO_VACANCY_EXTRAS,
   extraStudentEmail,
   extraStudentPhone,
 } from '../lib/db/seed-data';
@@ -92,6 +93,11 @@ async function main() {
   // --- Страница демо-компании ---
   for (const [crmClientId, profile] of Object.entries(DEMO_COMPANY_PROFILES)) {
     await prisma.employer.updateMany({ where: { crmClientId }, data: profile });
+  }
+
+  // --- Карточка вакансии v0.1 у демо-вакансий ---
+  for (const [crmId, extra] of Object.entries(DEMO_VACANCY_EXTRAS)) {
+    await prisma.vacancy.updateMany({ where: { crmId }, data: extra });
   }
 
   // --- Код доступа работодателя ---

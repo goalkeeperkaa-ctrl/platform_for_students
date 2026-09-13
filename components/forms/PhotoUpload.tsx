@@ -165,8 +165,11 @@ export function PhotoUpload({
       />
 
       <p className="text-center text-[12.5px] leading-snug text-paper-faint">
-        JPG, PNG или WebP до 5 МБ. Фото видят только те работодатели,
-        <br className="hidden sm:block" /> которым вы откликнулись.
+        JPG, PNG или WebP до 5 МБ.{' '}
+        {kind === 'company'
+          ? 'Студенты увидят после одобрения агентством.'
+          : 'Фото видят только те работодатели, которым вы откликнулись.'}
+        <br className="hidden sm:block" />
       </p>
     </div>
   );

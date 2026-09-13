@@ -10,6 +10,7 @@ import type { NavItem } from '@/components/layout/NavTabs';
 export function employerNav(applications: number, unread: number): NavItem[] {
   return [
     { href: '/employer', label: 'Отклики', badge: applications, exact: true },
+    { href: '/employer/vacancies', label: 'Вакансии' },
     { href: '/employer/messages', label: 'Сообщения', badge: unread },
     { href: '/employer/company', label: 'Компания' },
   ];

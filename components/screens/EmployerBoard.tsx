@@ -85,6 +85,13 @@ export function EmployerBoard({ board }: { board: BoardData }) {
         <EmptyState
           title="Откликов пока нет"
           description="Как только студент смахнёт вашу вакансию вправо, его профиль появится здесь — с фото, контактами и резюме."
+          action={
+            <Link href="/employer/vacancies">
+              <Button variant="accent" size="md">
+                Мои вакансии
+              </Button>
+            </Link>
+          }
         />
       </>
     );

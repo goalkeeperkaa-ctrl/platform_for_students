@@ -13,6 +13,7 @@ import {
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
   DEMO_STUDENT_PROFILE,
+  DEMO_VACANCY_EXTRAS,
   extraStudentEmail,
   extraStudentPhone,
 } from './seed-data';
@@ -132,6 +133,12 @@ async function seed(): Promise<Tables> {
   for (const employer of t.employers) {
     const profile = employer.crmClientId ? DEMO_COMPANY_PROFILES[employer.crmClientId] : undefined;
     if (profile) Object.assign(employer, profile);
+  }
+
+  // Карточка вакансии v0.1 у демо-вакансий: чему научится и с кем работать
+  for (const vacancy of t.vacancies) {
+    const extra = vacancy.crmId ? DEMO_VACANCY_EXTRAS[vacancy.crmId] : undefined;
+    if (extra) Object.assign(vacancy, structuredClone(extra));
   }
 
   // Код доступа работодателя — выдаётся в CRM, паролей у работодателя нет
@@ -342,6 +349,16 @@ function vacancyFromCrm(item: CrmVacancyInput, employerId: string): VacancyRecor
     tags: item.tags,
     isHot: item.isHot,
     isActive: item.isActive,
+    // Этих полей в выгрузке CRM нет: вакансию проверило агентство, а
+    // карточку v0.1 заполняют отдельно
+    learnings: [],
+    team: null,
+    photos: [],
+    videoUrl: null,
+    status: 'PUBLISHED',
+    moderationNote: null,
+    submittedAt: null,
+    moderatedAt: null,
     publishedAt: item.publishedAt,
     syncedAt: now(),
     createdAt: now(),
@@ -351,6 +368,13 @@ function vacancyFromCrm(item: CrmVacancyInput, employerId: string): VacancyRecor
 
 export async function createMemoryStore(): Promise<DataStore> {
   const t = await seed();
+
+  // Видна студенту: опубликована, не снята, компания одобрена. То же
+  // правило, что в запросе Prisma и в isVacancyVisible
+  const visible = (v: VacancyRecord) =>
+    v.isActive &&
+    v.status === 'PUBLISHED' &&
+    t.employers.find((e) => e.id === v.employerId)?.moderationStatus === 'APPROVED';
 
   const store: DataStore = {
     kind: 'memory',
@@ -538,11 +562,19 @@ export async function createMemoryStore(): Promise<DataStore> {
         Object.assign(employer, structuredClone(input));
         return clone(employer);
       },
+      async setModeration(id, { status, note }) {
+        const employer = t.employers.find((e) => e.id === id);
+        if (!employer) throw new Error('Компания не найдена');
+        employer.moderationStatus = status;
+        employer.moderationNote = note;
+        employer.moderatedAt = status === 'PENDING' ? null : now();
+        return clone(employer);
+      },
     },
 
     vacancies: {
       async listActive() {
-        return clone(t.vacancies.filter((v) => v.isActive));
+        return clone(t.vacancies.filter(visible));
       },
       async findById(id) {
         return clone(t.vacancies.find((v) => v.id === id) ?? null);
@@ -552,10 +584,48 @@ export async function createMemoryStore(): Promise<DataStore> {
         return clone(t.vacancies.filter((v) => set.has(v.id)));
       },
       async listByEmployer(employerId) {
-        return clone(t.vacancies.filter((v) => v.employerId === employerId));
+        return clone(
+          t.vacancies
+            .filter((v) => v.employerId === employerId)
+            .sort((a, b) => +b.publishedAt - +a.publishedAt),
+        );
+      },
+      async listByStatus(status) {
+        return clone(
+          t.vacancies
+            .filter((v) => v.status === status)
+            .sort((a, b) => +(a.submittedAt ?? a.createdAt) - +(b.submittedAt ?? b.createdAt)),
+        );
+      },
+      async listByPhoto(url) {
+        return clone(t.vacancies.filter((v) => v.photos.includes(url)));
+      },
+      async create(input) {
+        const vacancy: VacancyRecord = {
+          id: randomUUID(),
+          crmId: null,
+          ...structuredClone(input),
+          isHot: false,
+          moderationNote: null,
+          moderatedAt: null,
+          publishedAt: now(),
+          syncedAt: now(),
+          createdAt: now(),
+          updatedAt: now(),
+        };
+        t.vacancies.push(vacancy);
+        return clone(vacancy);
+      },
+      async update(id, patch) {
+        const vacancy = t.vacancies.find((v) => v.id === id);
+        if (!vacancy) throw new Error('Вакансия не найдена');
+        // undefined не затирает поле — как и в Prisma
+        const defined = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+        Object.assign(vacancy, structuredClone(defined), { updatedAt: now() });
+        return clone(vacancy);
       },
       async countAll() {
-        return { active: t.vacancies.filter((v) => v.isActive).length, total: t.vacancies.length };
+        return { active: t.vacancies.filter(visible).length, total: t.vacancies.length };
       },
       async syncFromCrm(items) {
         const outcome: SyncOutcome = { created: 0, updated: 0, deactivated: 0 };
@@ -594,6 +664,16 @@ export async function createMemoryStore(): Promise<DataStore> {
             Object.assign(existing, vacancyFromCrm(item, employer.id), {
               id: existing.id,
               createdAt: existing.createdAt,
+              // Полей карточки и модерации в выгрузке нет — синхронизация
+              // их не трогает, как и в базе
+              learnings: existing.learnings,
+              team: existing.team,
+              photos: existing.photos,
+              videoUrl: existing.videoUrl,
+              status: existing.status,
+              moderationNote: existing.moderationNote,
+              submittedAt: existing.submittedAt,
+              moderatedAt: existing.moderatedAt,
             });
             outcome.updated++;
           } else {

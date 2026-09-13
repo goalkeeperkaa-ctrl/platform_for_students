@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/layout/AppShell';
+import { adminNav } from '@/lib/admin-nav';
 import { AdminDashboard } from '@/components/screens/AdminDashboard';
 import { requireAdminPage } from '@/lib/security/guards';
 import { buildAdminStats, listAuditEntries, listSyncRuns } from '@/lib/services';
@@ -16,7 +17,11 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <AppShell user={{ name: session.name || 'HR-менеджер', subtitle: 'Fattakhov HR Agency' }} wide>
+    <AppShell
+      user={{ name: session.name || 'HR-менеджер', subtitle: 'Fattakhov HR Agency' }}
+      nav={adminNav(stats.moderation.companies + stats.moderation.vacancies)}
+      wide
+    >
       <AdminDashboard stats={stats} runs={runs} audit={audit} />
     </AppShell>
   );

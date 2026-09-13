@@ -11,6 +11,7 @@ import type {
   StudentStatus,
   SwipeDirection,
   SyncStatus,
+  VacancyStatus,
   Weekday,
   WorkFormat,
 } from '@/lib/types';
@@ -93,6 +94,10 @@ export interface VacancyRecord {
   responsibilities: string[];
   requirements: string[];
   perks: string[];
+  learnings: string[];
+  team: string | null;
+  photos: string[];
+  videoUrl: string | null;
   salaryFrom: number | null;
   salaryTo: number | null;
   salaryPeriod: SalaryPeriod;
@@ -105,6 +110,10 @@ export interface VacancyRecord {
   tags: string[];
   isHot: boolean;
   isActive: boolean;
+  status: VacancyStatus;
+  moderationNote: string | null;
+  submittedAt: Date | null;
+  moderatedAt: Date | null;
   publishedAt: Date;
   syncedAt: Date;
   createdAt: Date;
@@ -263,6 +272,43 @@ export interface CompanyProfileUpdate {
   videoUrl: string | null;
 }
 
+/**
+ * Содержимое вакансии из кабинета компании — ровно то, что проверяет форма.
+ * Статус и даты выставляет сервер.
+ */
+export type VacancyContent = Pick<
+  VacancyRecord,
+  | 'title'
+  | 'summary'
+  | 'responsibilities'
+  | 'requirements'
+  | 'perks'
+  | 'learnings'
+  | 'team'
+  | 'salaryFrom'
+  | 'salaryTo'
+  | 'salaryPeriod'
+  | 'city'
+  | 'district'
+  | 'workFormat'
+  | 'employmentType'
+  | 'shiftDays'
+  | 'hoursPerWeek'
+  | 'tags'
+  | 'photos'
+  | 'videoUrl'
+>;
+
+export interface NewVacancyInput extends VacancyContent {
+  employerId: string;
+  status: VacancyStatus;
+  isActive: boolean;
+  submittedAt: Date | null;
+}
+
+export type VacancyPatch = Partial<VacancyContent> &
+  Partial<Pick<VacancyRecord, 'status' | 'isActive' | 'moderationNote' | 'submittedAt' | 'moderatedAt' | 'publishedAt'>>;
+
 /** Форма вакансии, приходящая из CRM. crmId — ключ сопоставления. */
 export interface CrmVacancyInput {
   crmId: string;
@@ -338,13 +384,29 @@ export interface DataStore {
     list(): Promise<EmployerRecord[]>;
     createWithAccount(input: NewEmployerInput): Promise<{ account: AccountRecord; employer: EmployerRecord }>;
     updateProfile(id: string, input: CompanyProfileUpdate): Promise<EmployerRecord>;
+    /** Решение модерации. PENDING — вернуть на повторную проверку. */
+    setModeration(id: string, input: { status: ModerationStatus; note: string | null }): Promise<EmployerRecord>;
   };
 
   vacancies: {
+    /**
+     * Видимые студенту: опубликованные, не снятые, у одобренной компании.
+     * Правило то же, что в isVacancyVisible (lib/vacancy.ts).
+     */
     listActive(): Promise<VacancyRecord[]>;
     findById(id: string): Promise<VacancyRecord | null>;
     findManyByIds(ids: string[]): Promise<VacancyRecord[]>;
     listByEmployer(employerId: string): Promise<VacancyRecord[]>;
+    listByStatus(status: VacancyStatus): Promise<VacancyRecord[]>;
+    /**
+     * Вакансии, среди фото которых этот файл, — для раздачи картинок.
+     * Все, а не первая: одно фото компания может поставить в несколько
+     * вакансий, и черновик не должен прятать фото опубликованной.
+     */
+    listByPhoto(url: string): Promise<VacancyRecord[]>;
+    create(input: NewVacancyInput): Promise<VacancyRecord>;
+    update(id: string, patch: VacancyPatch): Promise<VacancyRecord>;
+    /** active — видимые студенту, total — все в базе */
     countAll(): Promise<{ active: number; total: number }>;
     syncFromCrm(items: CrmVacancyInput[]): Promise<SyncOutcome>;
   };

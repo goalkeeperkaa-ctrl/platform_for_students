@@ -42,10 +42,13 @@ export function CompanyEditor({
   initial,
   companyId,
   moderation,
+  selfRegistered,
 }: {
   initial: CompanyFormState;
   companyId: string;
   moderation: { status: ModerationStatus; note: string | null };
+  /** Зарегистрировалась сама, а не пришла из CRM — смена названия вернёт на проверку */
+  selfRegistered: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -100,14 +103,23 @@ export function CompanyEditor({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = (await response.json()) as { error?: string; fields?: Record<string, string> };
+      const data = (await response.json()) as {
+        error?: string;
+        fields?: Record<string, string>;
+        moderationStatus?: ModerationStatus;
+      };
       if (!response.ok) {
         if (data.fields) setErrors(data.fields);
         toast.error(data.error ?? 'Не удалось сохранить');
         return;
       }
       setSaved(form);
-      toast.success('Страница компании сохранена');
+      toast.success(
+        'Страница компании сохранена',
+        moderation.status === 'APPROVED' && data.moderationStatus === 'PENDING'
+          ? 'Название изменилось — компания снова на проверке агентства'
+          : undefined,
+      );
       router.refresh();
     } catch {
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
@@ -146,6 +158,11 @@ export function CompanyEditor({
               autoComplete="organization"
               value={form.companyName}
               error={errors.companyName}
+              hint={
+                selfRegistered && moderation.status === 'APPROVED'
+                  ? 'После смены названия компания снова пройдёт проверку агентства'
+                  : undefined
+              }
               onChange={(e) => patch({ companyName: e.target.value })}
             />
             <div className="grid gap-3 sm:grid-cols-2">

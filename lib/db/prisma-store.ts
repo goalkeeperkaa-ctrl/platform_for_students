@@ -4,6 +4,7 @@ import { blindIndex, encrypt } from '@/lib/security/crypto';
 import { hashPassword } from '@/lib/security/password';
 import { readCompanyProfile } from '@/lib/company';
 import { readPortfolio } from '@/lib/portfolio';
+import { readVacancyMedia } from '@/lib/vacancy';
 import { prisma } from './prisma-client';
 import { AccountExistsError } from './memory';
 import type { CrmVacancyInput, DataStore, MessageRecord, SyncOutcome } from './types';
@@ -31,6 +32,22 @@ function toEmployerRecord<T extends Parameters<typeof readCompanyProfile>[0]>(ro
 function json(value: unknown): Prisma.InputJsonValue | undefined {
   return value === undefined ? undefined : (value as Prisma.InputJsonValue);
 }
+
+/** Вакансия из строки базы: фото — только файлы компании, видео — только http(s). */
+function toVacancyRecord<T extends Parameters<typeof readVacancyMedia>[0]>(row: T): T {
+  return readVacancyMedia(row);
+}
+
+/**
+ * Вакансия, которую видит студент. Условие — в запросе, а не фильтром после
+ * выборки: иначе лента вытягивала бы черновики всех компаний, чтобы тут же
+ * их выбросить. То же правило — isVacancyVisible в lib/vacancy.ts.
+ */
+const VISIBLE_VACANCY: Prisma.VacancyWhereInput = {
+  isActive: true,
+  status: 'PUBLISHED',
+  employer: { moderationStatus: 'APPROVED' },
+};
 
 /**
  * Боевое хранилище поверх PostgreSQL.
@@ -226,18 +243,57 @@ export function createPrismaStore(): DataStore {
         });
         return toEmployerRecord(row);
       },
+      async setModeration(id, { status, note }) {
+        const row = await prisma.employer.update({
+          where: { id },
+          data: {
+            moderationStatus: status,
+            moderationNote: note,
+            // Дата решения; возврат на проверку решением не является
+            moderatedAt: status === 'PENDING' ? null : new Date(),
+          },
+        });
+        return toEmployerRecord(row);
+      },
     },
 
     vacancies: {
-      listActive: () =>
-        prisma.vacancy.findMany({ where: { isActive: true }, orderBy: { publishedAt: 'desc' } }),
-      findById: (id) => prisma.vacancy.findUnique({ where: { id } }),
-      findManyByIds: (ids) => prisma.vacancy.findMany({ where: { id: { in: ids } } }),
-      listByEmployer: (employerId) =>
-        prisma.vacancy.findMany({ where: { employerId }, orderBy: { publishedAt: 'desc' } }),
+      async listActive() {
+        const rows = await prisma.vacancy.findMany({ where: VISIBLE_VACANCY, orderBy: { publishedAt: 'desc' } });
+        return rows.map(toVacancyRecord);
+      },
+      async findById(id) {
+        const row = await prisma.vacancy.findUnique({ where: { id } });
+        return row ? toVacancyRecord(row) : null;
+      },
+      async findManyByIds(ids) {
+        const rows = await prisma.vacancy.findMany({ where: { id: { in: ids } } });
+        return rows.map(toVacancyRecord);
+      },
+      async listByEmployer(employerId) {
+        const rows = await prisma.vacancy.findMany({ where: { employerId }, orderBy: { publishedAt: 'desc' } });
+        return rows.map(toVacancyRecord);
+      },
+      async listByStatus(status) {
+        const rows = await prisma.vacancy.findMany({
+          where: { status },
+          orderBy: [{ submittedAt: 'asc' }, { createdAt: 'asc' }],
+        });
+        return rows.map(toVacancyRecord);
+      },
+      async listByPhoto(url) {
+        const rows = await prisma.vacancy.findMany({ where: { photos: { has: url } } });
+        return rows.map(toVacancyRecord);
+      },
+      async create(input) {
+        return toVacancyRecord(await prisma.vacancy.create({ data: input }));
+      },
+      async update(id, patch) {
+        return toVacancyRecord(await prisma.vacancy.update({ where: { id }, data: patch }));
+      },
       async countAll() {
         const [active, total] = await Promise.all([
-          prisma.vacancy.count({ where: { isActive: true } }),
+          prisma.vacancy.count({ where: VISIBLE_VACANCY }),
           prisma.vacancy.count(),
         ]);
         return { active, total };

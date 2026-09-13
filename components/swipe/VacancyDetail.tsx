@@ -1,9 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Clock, Flame, Gift, MapPin, Sparkles, X } from 'lucide-react';
+import { Check, Clock, Flame, Gift, GraduationCap, MapPin, PlayCircle, Sparkles, Users, X } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Tag } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
@@ -172,7 +173,42 @@ export function VacancyDetail({
 
               <Section title="Что делать" items={vacancy.responsibilities} icon={<Check className="size-3.5" />} />
               <Section title="Что нужно от вас" items={vacancy.requirements} icon={<Check className="size-3.5" />} />
+              <Section title="Чему научитесь" items={vacancy.learnings} icon={<GraduationCap className="size-3.5" />} />
+              {vacancy.team && (
+                <section className="mt-7">
+                  <h3 className="text-eyebrow uppercase text-paper-faint">С кем будете работать</h3>
+                  <p className="mt-3 flex items-start gap-2.5 text-[14.5px] leading-relaxed text-paper-dim">
+                    <Users className="mt-1 size-3.5 shrink-0 text-accent-300" aria-hidden />
+                    <span className="min-w-0 whitespace-pre-line break-words">{vacancy.team}</span>
+                  </p>
+                </section>
+              )}
               <Section title="Условия" items={vacancy.perks} icon={<Gift className="size-3.5" />} />
+
+              {vacancy.photos.length > 0 && (
+                <section className="mt-7 grid grid-cols-2 gap-2.5 sm:grid-cols-3" aria-label="Фото с места работы">
+                  {vacancy.photos.map((src) => (
+                    <div
+                      key={src}
+                      className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[var(--hairline)]"
+                    >
+                      <Image src={src} alt="" fill unoptimized sizes="(min-width: 640px) 200px, 45vw" className="object-cover" />
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {vacancy.videoUrl && /^https?:\/\//i.test(vacancy.videoUrl) && (
+                <a
+                  href={vacancy.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow ugc"
+                  className="mt-7 inline-flex max-w-full items-center gap-2 rounded-xl border border-[var(--hairline)] bg-graphite-900/45 px-3.5 py-2.5 text-[13.5px] text-paper/85 transition-colors hover:border-paper/25 hover:text-paper"
+                >
+                  <PlayCircle className="size-4 shrink-0" aria-hidden />
+                  Видео о работе
+                </a>
+              )}
 
               <div className="mt-7 flex items-center gap-2 text-[13px] text-paper-faint">
                 <Clock className="size-3.5 shrink-0" aria-hidden />

@@ -63,6 +63,14 @@ enum ModerationStatus {
   REJECTED
 }
 
+enum VacancyStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+  REJECTED
+  CLOSED
+}
+
 enum WorkFormat {
   ONSITE
   HYBRID
@@ -265,6 +273,13 @@ model Vacancy {
   requirements     String[] @default([])
   perks            String[] @default([])
 
+  // Карточка вакансии v0.1 с доски Miro: что студент получит и с кем будет
+  // работать. У вакансий из CRM эти поля пусты, пока агентство не заполнит.
+  learnings String[] @default([])
+  team      String?  @db.Text
+  photos    String[] @default([])
+  videoUrl  String?
+
   salaryFrom   Int?
   salaryTo     Int?
   salaryPeriod SalaryPeriod @default(MONTH)
@@ -282,6 +297,15 @@ model Vacancy {
 
   /// Снята с публикации, а не удалена: на вакансии висят отклики
   isActive Boolean @default(true)
+
+  // Путь вакансии из кабинета: черновик → на модерации → опубликована,
+  // отклонена или снята. Студенту видна только опубликованная — и только
+  // у одобренной компании. Вакансии из CRM приходят уже опубликованными:
+  // их проверило агентство, поэтому и значение по умолчанию такое.
+  status         VacancyStatus @default(PUBLISHED)
+  moderationNote String?
+  submittedAt    DateTime?
+  moderatedAt    DateTime?
 
   publishedAt DateTime @default(now())
   syncedAt    DateTime @default(now())

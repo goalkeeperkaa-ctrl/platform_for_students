@@ -23,7 +23,20 @@ export async function PATCH(request: Request) {
     const { session, employer, store } = await requireEmployer();
 
     const input = companyProfileSchema.parse(await request.json());
-    const updated = await store.employers.updateProfile(employer.id, input);
+    let updated = await store.employers.updateProfile(employer.id, input);
+
+    // Компания, зарегистрированная сама, после смены названия проходит
+    // проверку снова: иначе одобрение одной вывески превращалось бы в
+    // публичную страницу под любой другой. Клиентов из CRM это не касается —
+    // их название приходит из договора.
+    if (!employer.crmClientId && employer.moderationStatus === 'APPROVED' && updated.companyName !== employer.companyName) {
+      updated = await store.employers.setModeration(employer.id, { status: 'PENDING', note: null });
+      await audit(
+        session,
+        { action: 'employer.remoderation', entity: 'Employer', entityId: employer.id, meta: { reason: 'renamed' } },
+        request.headers,
+      );
+    }
 
     // Название компании — в сессионном токене, шапка берёт его оттуда.
     // Без переподписи новое название появилось бы только после перевхода.
