@@ -130,6 +130,8 @@ export interface VacancyRecord {
   moderationNote: string | null;
   submittedAt: Date | null;
   moderatedAt: Date | null;
+  /** Последняя одобренная агентством версия содержимого; null — не одобрялась */
+  approvedContent: VacancyContent | null;
   publishedAt: Date;
   syncedAt: Date;
   createdAt: Date;
@@ -338,7 +340,12 @@ export interface NewVacancyInput extends VacancyContent {
 }
 
 export type VacancyPatch = Partial<VacancyContent> &
-  Partial<Pick<VacancyRecord, 'status' | 'isActive' | 'moderationNote' | 'submittedAt' | 'moderatedAt' | 'publishedAt'>>;
+  Partial<
+    Pick<
+      VacancyRecord,
+      'status' | 'isActive' | 'moderationNote' | 'submittedAt' | 'moderatedAt' | 'publishedAt' | 'approvedContent'
+    >
+  >;
 
 /** Форма вакансии, приходящая из CRM. crmId — ключ сопоставления. */
 export interface CrmVacancyInput {
@@ -505,5 +512,7 @@ export interface DataStore {
     log(entry: Omit<EventRecord, 'id' | 'createdAt'>): Promise<void>;
     /** Новые первыми. types — только эти события */
     list(filter: { types?: string[]; limit: number }): Promise<EventRecord[]>;
+    /** Сколько событий каждого типа — без выборки самих событий */
+    countByType(types: string[]): Promise<Record<string, number>>;
   };
 }

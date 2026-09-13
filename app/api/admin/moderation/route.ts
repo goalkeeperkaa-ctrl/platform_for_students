@@ -2,7 +2,7 @@ import { fail, handle, ok } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
 import { buildModerationQueue } from '@/lib/services';
-import { moderationDecisionSchema } from '@/lib/vacancy';
+import { moderationDecisionSchema, vacancyContentOf } from '@/lib/vacancy';
 import { track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
     const session = await requireRole('ADMIN');
-    const { entity, id, decision, note } = moderationDecisionSchema.parse(await request.json());
+    const { entity, id, decision, note, version } = moderationDecisionSchema.parse(await request.json());
     const store = await getStore();
     const approve = decision === 'APPROVE';
 
@@ -54,6 +54,11 @@ export async function POST(request: Request) {
     if (vacancy.status !== 'PENDING') {
       return fail(409, 'Вакансия уже не на проверке — обновите страницу', 'NOT_PENDING');
     }
+    // Решение — о той версии, которую HR видел. Компания могла сохранить
+    // правку, пока открыта очередь, и одобрить её вслепую нельзя
+    if (version && version !== vacancy.updatedAt.toISOString()) {
+      return fail(409, 'Компания изменила вакансию, пока вы её смотрели, — обновите страницу', 'STALE_VERSION');
+    }
 
     if (approve) {
       const employer = await store.employers.findById(vacancy.employerId);
@@ -69,6 +74,9 @@ export async function POST(request: Request) {
         moderationNote: null,
         moderatedAt: now,
         publishedAt: now,
+        // Снимок одобренного: пока следующая правка ждёт проверки, студенты,
+        // которые уже откликнулись, видят именно его
+        approvedContent: vacancyContentOf(vacancy),
       });
       await track('vacancy.published', { vacancyId: id, employerId: vacancy.employerId });
     } else {

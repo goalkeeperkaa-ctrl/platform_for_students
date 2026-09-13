@@ -116,9 +116,11 @@ export function CompanyEditor({
       setSaved(form);
       toast.success(
         'Страница компании сохранена',
-        moderation.status === 'APPROVED' && data.moderationStatus === 'PENDING'
+        data.moderationStatus === 'PENDING' && moderation.status === 'APPROVED'
           ? 'Название изменилось — компания снова на проверке агентства'
-          : undefined,
+          : data.moderationStatus === 'PENDING' && moderation.status === 'REJECTED'
+            ? 'Страница снова отправлена на проверку агентству'
+            : undefined,
       );
       router.refresh();
     } catch {
@@ -387,7 +389,7 @@ function ModerationBanner({
           Агентство не одобрило компанию
         </p>
         {note && <p className="mt-1.5 text-paper-dim">{note}</p>}
-        <p className="mt-1.5 text-paper-faint">Поправьте страницу и напишите в агентство — проверим снова.</p>
+        <p className="mt-1.5 text-paper-faint">Поправьте страницу и сохраните — она снова уйдёт на проверку.</p>
       </div>
     );
   }

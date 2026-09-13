@@ -4,7 +4,7 @@ import { blindIndex, encrypt } from '@/lib/security/crypto';
 import { hashPassword } from '@/lib/security/password';
 import { readCompanyProfile } from '@/lib/company';
 import { readPortfolio } from '@/lib/portfolio';
-import { readVacancyMedia } from '@/lib/vacancy';
+import { readApprovedContent, readVacancyMedia } from '@/lib/vacancy';
 import { prisma } from './prisma-client';
 import { AccountExistsError } from './memory';
 import type { CrmVacancyInput, DataStore, MessageRecord, SyncOutcome } from './types';
@@ -33,9 +33,14 @@ function json(value: unknown): Prisma.InputJsonValue | undefined {
   return value === undefined ? undefined : (value as Prisma.InputJsonValue);
 }
 
-/** Вакансия из строки базы: фото — только файлы компании, видео — только http(s). */
-function toVacancyRecord<T extends Parameters<typeof readVacancyMedia>[0]>(row: T): T {
-  return readVacancyMedia(row);
+/**
+ * Вакансия из строки базы: фото — только файлы компании, видео — только
+ * http(s), снимок одобренной версии — проверенный схемой или null.
+ */
+function toVacancyRecord<T extends Parameters<typeof readVacancyMedia>[0] & { approvedContent: unknown }>(
+  row: T,
+): Omit<T, 'approvedContent'> & { approvedContent: ReturnType<typeof readApprovedContent> } {
+  return { ...readVacancyMedia(row), approvedContent: readApprovedContent(row.approvedContent) };
 }
 
 /**
@@ -308,7 +313,12 @@ export function createPrismaStore(): DataStore {
         return toVacancyRecord(await prisma.vacancy.create({ data: input }));
       },
       async update(id, patch) {
-        return toVacancyRecord(await prisma.vacancy.update({ where: { id }, data: patch }));
+        return toVacancyRecord(
+          await prisma.vacancy.update({
+            where: { id },
+            data: { ...patch, approvedContent: json(patch.approvedContent) },
+          }),
+        );
       },
       async countAll() {
         const [active, total] = await Promise.all([
@@ -499,6 +509,14 @@ export function createPrismaStore(): DataStore {
     events: {
       async log(entry) {
         await prisma.analyticsEvent.create({ data: entry });
+      },
+      async countByType(types) {
+        const rows = await prisma.analyticsEvent.groupBy({
+          by: ['type'],
+          where: { type: { in: types } },
+          _count: { _all: true },
+        });
+        return Object.fromEntries(rows.map((row) => [row.type, row._count._all]));
       },
       list: ({ types, limit }) =>
         prisma.analyticsEvent.findMany({

@@ -2,6 +2,7 @@ import 'server-only';
 import { getStore } from '@/lib/db';
 import { studentName } from '@/lib/db/mappers';
 import { decryptSafe } from '@/lib/security/crypto';
+import { studentFacingVacancy } from '@/lib/vacancy';
 import type { ApplicationRecord, MessageRecord } from '@/lib/db/types';
 import type {
   ApplicationStatus,
@@ -134,7 +135,8 @@ function buildSummary(
   return {
     applicationId: application.id,
     vacancyId: vacancy.id,
-    vacancyTitle: vacancy.title,
+    // Студенту — одобренное название, пока правка компании на проверке
+    vacancyTitle: viewer.role === 'STUDENT' ? studentFacingVacancy(vacancy, employer).title : vacancy.title,
     company: employer.companyName,
     counterpartName: counterpart.name,
     counterpartPhotoUrl: counterpart.photoUrl,

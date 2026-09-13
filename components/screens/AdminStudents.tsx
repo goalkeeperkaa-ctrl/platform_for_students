@@ -40,7 +40,9 @@ export function AdminStudents({
   const [query, setQuery] = useState('');
   const [school, setSchool] = useState('ALL');
   const [verification, setVerification] = useState<VerificationFilter>('ALL');
-  const [busy, setBusy] = useState<string | null>(null);
+  // Занятые строки — множеством: общий флаг снимался первым же ответом и
+  // открывал повторное нажатие в строке, чей запрос ещё идёт
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,7 +55,7 @@ export function AdminStudents({
   }, [students, query, school, verification]);
 
   async function update(student: AdminStudentDTO, change: { status?: StudentStatus; studyVerified?: boolean }) {
-    setBusy(student.id);
+    setBusy((current) => new Set(current).add(student.id));
     setStudents((list) => list.map((s) => (s.id === student.id ? { ...s, ...change } : s)));
     try {
       const response = await fetch('/api/admin/students', {
@@ -75,7 +77,11 @@ export function AdminStudents({
       setStudents((list) => list.map((s) => (s.id === student.id ? student : s)));
       toast.error('Не удалось сохранить', error instanceof Error ? error.message : undefined);
     } finally {
-      setBusy(null);
+      setBusy((current) => {
+        const next = new Set(current);
+        next.delete(student.id);
+        return next;
+      });
     }
   }
 
@@ -123,7 +129,7 @@ export function AdminStudents({
       ) : (
         <ul className="surface divide-y divide-[var(--hairline)] overflow-hidden rounded-3xl">
           {visible.map((student) => {
-            const isBusy = busy === student.id;
+            const isBusy = busy.has(student.id);
             return (
               <li key={student.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4">
                 <div className="flex min-w-0 grow basis-64 items-center gap-3">

@@ -274,10 +274,13 @@ export function ProfileEditor({
               value={String(form.birthYear)}
               error={errors.birthYear}
               onChange={(e) => patch({ birthYear: Number(e.target.value) })}
-              options={Array.from({ length: 27 }, (_, i) => {
-                const year = CURRENT_YEAR - 18 - i;
-                return { value: String(year), label: String(year) };
-              })}
+              // Год того, кто зарегистрировался раньше по правилу 14+, в списке
+              // остаётся: иначе поле показывало бы не его год
+              options={Array.from(
+                new Set([...Array.from({ length: 27 }, (_, i) => CURRENT_YEAR - 18 - i), initial.birthYear]),
+              )
+                .sort((a, b) => b - a)
+                .map((year) => ({ value: String(year), label: String(year) }))}
             />
 
             <TextField

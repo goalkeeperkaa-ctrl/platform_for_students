@@ -380,6 +380,8 @@ export interface ModerationVacancyDTO {
   companyId: string;
   companyStatus: ModerationStatus;
   submittedAt: string;
+  /** Версия, которую видит HR: решение по устаревшей версии сервер отклонит */
+  version: string;
   vacancy: VacancyDTO;
 }
 

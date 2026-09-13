@@ -38,6 +38,18 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // Отклонённая компания поправила страницу — это и есть просьба проверить
+    // снова. Иначе после отказа пути назад не было бы: очередь HR показывает
+    // только тех, кто ждёт решения
+    if (employer.moderationStatus === 'REJECTED') {
+      updated = await store.employers.setModeration(employer.id, { status: 'PENDING', note: null });
+      await audit(
+        session,
+        { action: 'employer.remoderation', entity: 'Employer', entityId: employer.id, meta: { reason: 'resubmitted' } },
+        request.headers,
+      );
+    }
+
     // Название компании — в сессионном токене, шапка берёт его оттуда.
     // Без переподписи новое название появилось бы только после перевхода.
     if (updated.companyName !== session.name) {

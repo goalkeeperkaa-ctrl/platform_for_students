@@ -55,11 +55,11 @@ export function EmployerVacancies({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [closing, setClosing] = useState<string | null>(null);
 
   async function act(vacancy: EmployerVacancyDTO, action: 'submit' | 'close') {
-    setBusy(vacancy.id);
+    setBusy((current) => new Set(current).add(vacancy.id));
     try {
       const response = await fetch(`/api/employer/vacancies/${vacancy.id}`, {
         method: 'POST',
@@ -77,7 +77,11 @@ export function EmployerVacancies({
     } catch {
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
     } finally {
-      setBusy(null);
+      setBusy((current) => {
+        const next = new Set(current);
+        next.delete(vacancy.id);
+        return next;
+      });
     }
   }
 
@@ -125,7 +129,7 @@ export function EmployerVacancies({
       ) : (
         <ul className="grid gap-3">
           {vacancies.map((vacancy) => {
-            const isBusy = busy === vacancy.id;
+            const isBusy = busy.has(vacancy.id);
             return (
               <li key={vacancy.id} className="surface min-w-0 rounded-3xl p-5">
                 {/* На телефоне статус над названием: в одну строку с бейджами

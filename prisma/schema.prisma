@@ -318,6 +318,11 @@ model Vacancy {
   submittedAt    DateTime?
   moderatedAt    DateTime?
 
+  /// Содержимое, которое агентство одобрило последним. Пока правка компании
+  /// ждёт проверки, студенты, которые уже откликнулись, видят его: иначе
+  /// непроверенный текст доходил бы до людей в обход модерации.
+  approvedContent Json?
+
   publishedAt DateTime @default(now())
   syncedAt    DateTime @default(now())
   createdAt   DateTime @default(now())

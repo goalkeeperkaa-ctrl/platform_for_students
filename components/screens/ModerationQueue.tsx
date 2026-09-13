@@ -46,17 +46,23 @@ export function ModerationQueue({
   const toast = useToast();
   const [companies, setCompanies] = useState(initialCompanies);
   const [vacancies, setVacancies] = useState(initialVacancies);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [preview, setPreview] = useState<VacancyDTO | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
 
-  async function decide(entity: Entity, id: string, decision: Decision, note?: string): Promise<boolean> {
-    setBusy(id);
+  async function decide(
+    entity: Entity,
+    id: string,
+    decision: Decision,
+    note?: string,
+    version?: string,
+  ): Promise<boolean> {
+    setBusy((current) => new Set(current).add(id));
     try {
       const response = await fetch('/api/admin/moderation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity, id, decision, note }),
+        body: JSON.stringify({ entity, id, decision, note, version }),
       });
       const data = (await response.json()) as { error?: string; fields?: Record<string, string> };
       if (!response.ok) {
@@ -79,7 +85,11 @@ export function ModerationQueue({
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
       return false;
     } finally {
-      setBusy(null);
+      setBusy((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -114,7 +124,7 @@ export function ModerationQueue({
               <CompanyCard
                 key={company.id}
                 company={company}
-                busy={busy === company.id}
+                busy={busy.has(company.id)}
                 onDecide={(decision, note) => decide('company', company.id, decision, note)}
               />
             ))}
@@ -132,9 +142,9 @@ export function ModerationQueue({
               <VacancyCard
                 key={item.vacancy.id}
                 item={item}
-                busy={busy === item.vacancy.id}
+                busy={busy.has(item.vacancy.id)}
                 onPreview={() => setPreview(item.vacancy)}
-                onDecide={(decision, note) => decide('vacancy', item.vacancy.id, decision, note)}
+                onDecide={(decision, note) => decide('vacancy', item.vacancy.id, decision, note, item.version)}
               />
             ))}
           </div>

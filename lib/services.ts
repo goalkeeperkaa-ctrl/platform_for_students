@@ -3,7 +3,7 @@ import { getStore } from '@/lib/db';
 import { scoreMatch, studentName, toStudentDTO, toVacancyDTO } from '@/lib/db/mappers';
 import { decryptSafe } from '@/lib/security/crypto';
 import type { EmployerRecord, InstitutionRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
-import { isVacancyVisible } from '@/lib/vacancy';
+import { isVacancyVisible, studentFacingVacancy } from '@/lib/vacancy';
 import { NEXT_STEP_STATUSES } from '@/lib/analytics';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import {
@@ -113,6 +113,13 @@ export async function listApplications(studentId: string): Promise<ApplicationDT
     store.students.findById(studentId),
   ]);
   const byId = new Map(vacancies.map((v) => [v.id, v]));
+  // Скрытая вакансия — в последней одобренной версии: правка компании до
+  // проверки агентством к студенту не попадает
+  const facing = (vacancy: VacancyRecord) => {
+    const employer = employers.get(vacancy.employerId) ?? null;
+    const shown = studentFacingVacancy(vacancy, employer);
+    return toVacancyDTO(shown, employer, scoreMatch(student, shown));
+  };
 
   return applications.flatMap((application) => {
     const vacancy = byId.get(application.vacancyId);
@@ -124,11 +131,7 @@ export async function listApplications(studentId: string): Promise<ApplicationDT
         createdAt: application.createdAt.toISOString(),
         statusChangedAt: application.statusChangedAt.toISOString(),
         employerNote: application.employerNote,
-        vacancy: toVacancyDTO(
-          vacancy,
-          employers.get(vacancy.employerId) ?? null,
-          scoreMatch(student, vacancy),
-        ),
+        vacancy: facing(vacancy),
       } satisfies ApplicationDTO,
     ];
   });
@@ -145,6 +148,11 @@ export async function listSkipped(studentId: string): Promise<SkippedDTO[]> {
     store.students.findById(studentId),
   ]);
   const byId = new Map(vacancies.map((v) => [v.id, v]));
+  const facing = (vacancy: VacancyRecord) => {
+    const employer = employers.get(vacancy.employerId) ?? null;
+    const shown = studentFacingVacancy(vacancy, employer);
+    return toVacancyDTO(shown, employer, scoreMatch(student, shown));
+  };
 
   return swipes.flatMap((swipe) => {
     const vacancy = byId.get(swipe.vacancyId);
@@ -153,11 +161,7 @@ export async function listSkipped(studentId: string): Promise<SkippedDTO[]> {
       {
         id: swipe.id,
         createdAt: swipe.createdAt.toISOString(),
-        vacancy: toVacancyDTO(
-          vacancy,
-          employers.get(vacancy.employerId) ?? null,
-          scoreMatch(student, vacancy),
-        ),
+        vacancy: facing(vacancy),
       } satisfies SkippedDTO,
     ];
   });
@@ -488,6 +492,7 @@ export async function buildModerationQueue(): Promise<ModerationQueue> {
         companyId: employer.id,
         companyStatus: employer.moderationStatus,
         submittedAt: (vacancy.submittedAt ?? vacancy.updatedAt).toISOString(),
+        version: vacancy.updatedAt.toISOString(),
         // Страница неодобренной компании не публична — ссылке из карточки вести некуда
         vacancy: employer.moderationStatus === 'APPROVED' ? dto : { ...dto, companyId: null },
       },
@@ -562,13 +567,17 @@ function median(values: number[]): number | null {
  */
 export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
   const store = await getStore();
-  const [students, applications, employers, vacancyCounts, visible, events] = await Promise.all([
+  const [students, applications, employers, vacancyCounts, visible, pathEvents, latest, counts] = await Promise.all([
     store.students.list(),
     store.applications.listAll(),
     store.employers.list(),
     store.vacancies.countAll(),
     store.vacancies.listActive(),
-    store.events.list({ limit: 5000 }),
+    // Только события пути и без потолка на общее число: срез «последних N»
+    // через несколько тысяч событий тихо занижал бы метрики
+    store.events.list({ types: ['application.created', 'application.next_step'], limit: 1_000_000 }),
+    store.events.list({ limit: 50 }),
+    store.events.countByType(['profile.viewed']),
   ]);
 
   const studentById = new Map(students.map((s) => [s.id, s]));
@@ -585,11 +594,16 @@ export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
     keepEarliest(firstApplication, a.studentId, +a.createdAt);
     if (nextStep.has(a.status)) keepEarliest(firstOpportunity, a.studentId, +a.statusChangedAt);
   }
-  for (const e of events) {
-    if (e.type === 'application.next_step' && e.studentId && studentById.has(e.studentId)) {
-      keepEarliest(firstOpportunity, e.studentId, +e.createdAt);
-    }
+  // Отклик мог быть отозван свайпом влево: события о нём остаются, и
+  // студент по-прежнему считается откликнувшимся
+  for (const e of pathEvents) {
+    if (!e.studentId || !studentById.has(e.studentId)) continue;
+    if (e.type === 'application.created') keepEarliest(firstApplication, e.studentId, +e.createdAt);
+    if (e.type === 'application.next_step') keepEarliest(firstOpportunity, e.studentId, +e.createdAt);
   }
+  // Приглашённый откликался, даже если отклик потом отозван, — доля не
+  // может перевалить за 100%
+  const applied = new Set(Array.from(firstApplication.keys()).concat(Array.from(firstOpportunity.keys())));
 
   const sinceRegistration = (map: Map<string, number>, unitMs: number) =>
     Array.from(map.entries()).flatMap(([id, time]) => {
@@ -598,7 +612,6 @@ export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
     });
 
   const selfRegistered = employers.filter((e) => !e.crmClientId);
-  const latest = events.slice(0, 50);
   const titles = new Map(
     (
       await store.vacancies.findManyByIds(
@@ -612,7 +625,7 @@ export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
     students: {
       registered: students.length,
       completedProfile: students.filter((s) => profileCompleteness(s).percent >= COMPLETE_PROFILE_PERCENT).length,
-      applied: firstApplication.size,
+      applied: applied.size,
       gotOpportunity: firstOpportunity.size,
       verified: students.filter((s) => s.studyVerified).length,
     },
@@ -632,7 +645,7 @@ export async function buildPilotMetrics(): Promise<PilotMetricsDTO> {
       nextStep: applications.filter((a) => nextStep.has(a.status)).length,
       hired: applications.filter((a) => a.status === 'HIRED').length,
     },
-    profileViews: events.filter((e) => e.type === 'profile.viewed').length,
+    profileViews: counts['profile.viewed'] ?? 0,
     timing: {
       firstApplicationHours: median(sinceRegistration(firstApplication, 3_600_000)),
       firstOpportunityDays: median(sinceRegistration(firstOpportunity, 86_400_000)),

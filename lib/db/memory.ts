@@ -380,6 +380,7 @@ function vacancyFromCrm(item: CrmVacancyInput, employerId: string): VacancyRecor
     moderationNote: null,
     submittedAt: null,
     moderatedAt: null,
+    approvedContent: null,
     publishedAt: item.publishedAt,
     syncedAt: now(),
     createdAt: now(),
@@ -661,6 +662,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           isHot: false,
           moderationNote: null,
           moderatedAt: null,
+          approvedContent: null,
           publishedAt: now(),
           syncedAt: now(),
           createdAt: now(),
@@ -727,6 +729,7 @@ export async function createMemoryStore(): Promise<DataStore> {
               moderationNote: existing.moderationNote,
               submittedAt: existing.submittedAt,
               moderatedAt: existing.moderatedAt,
+              approvedContent: existing.approvedContent,
             });
             outcome.updated++;
           } else {
@@ -966,7 +969,12 @@ export async function createMemoryStore(): Promise<DataStore> {
       async log(entry) {
         t.events.push({ ...entry, id: randomUUID(), createdAt: now() });
         // Как и журнал аудита: в памяти процесса он не должен расти бесконечно
-        if (t.events.length > 5000) t.events.splice(0, t.events.length - 5000);
+        if (t.events.length > 20000) t.events.splice(0, t.events.length - 20000);
+      },
+      async countByType(types) {
+        const counts: Record<string, number> = {};
+        for (const e of t.events) if (types.includes(e.type)) counts[e.type] = (counts[e.type] ?? 0) + 1;
+        return counts;
       },
       async list({ types, limit }) {
         const only = types ? new Set(types) : null;

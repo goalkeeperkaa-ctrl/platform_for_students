@@ -632,6 +632,15 @@ async function main() {
   );
   check('на регистрации есть справочник вузов', String((await new Session().request('/register')).body).includes('МГТУ им. Баумана'));
 
+  // Правило 18+ — для регистрации: профиль того, кто пришёл раньше по
+  // правилу 14+, должен сохраняться
+  const earlierRule = await owner.patch('/api/students/me', {
+    ...ownerProfile,
+    fullName: 'Профиль Изменённый',
+    birthYear: new Date().getFullYear() - 16,
+  });
+  check('профиль из прежней регистрации младше 18 сохраняется', earlierRule.status === 200, earlierRule.body);
+
   const erased = await owner.delete('/api/students/me', {});
   check('профиль удаляется', erased.status === 200, erased.body);
   check('после удаления сессии нет', (await owner.request('/api/auth/me')).body.session === null);
@@ -868,6 +877,20 @@ async function main() {
   });
   check('исправленная вакансия снова на проверке', resubmitted.status === 200 && resubmitted.body?.status === 'PENDING', resubmitted.body);
 
+  const companyRejected = await admin.post('/api/admin/moderation', {
+    entity: 'company',
+    id: companyId,
+    decision: 'REJECT',
+    note: 'Добавьте, чем занимается команда',
+  });
+  check('компанию можно отклонить с причиной', companyRejected.status === 200 && companyRejected.body?.status === 'REJECTED', companyRejected.body);
+  const companyResubmitted = await company.patch('/api/employer/company', companyPage);
+  check(
+    'отклонённая компания после правки снова на проверке',
+    companyResubmitted.status === 200 && companyResubmitted.body?.moderationStatus === 'PENDING',
+    companyResubmitted.body,
+  );
+
   const companyApproved = await admin.post('/api/admin/moderation', { entity: 'company', id: companyId, decision: 'APPROVE' });
   check('компания одобряется', companyApproved.status === 200 && companyApproved.body?.status === 'APPROVED', companyApproved.body);
   check('одобренная компания открыта гостю', (await new Session().request(`/companies/${companyId}`)).status === 200);
@@ -927,6 +950,37 @@ async function main() {
     );
   }
 
+  // Правка опубликованной вакансии не доходит до откликнувшихся до проверки
+  const unreviewed = await company.patch(`/api/employer/vacancies/${vacancyId}`, { ...vacancyForm, title: 'Непроверенная правка' });
+  check('правка вакансии с откликами уходит на проверку', unreviewed.status === 200 && unreviewed.body?.status === 'PENDING', unreviewed.body);
+  const appsAfterEdit = ((await student.request('/api/applications')).body?.applications ?? []) as Array<{
+    vacancy: { id: string; title: string };
+  }>;
+  const shownTitle = appsAfterEdit.find((a) => a.vacancy.id === vacancyId)?.vacancy.title;
+  check('откликнувшийся видит одобренную версию, а не правку', shownTitle === 'Стажёр-аналитик данных', shownTitle);
+  if (finalApplication) {
+    const threadAfterEdit = await student.request(`/api/messages/${finalApplication.id}`);
+    check(
+      'в переписке у студента название до проверки не меняется',
+      threadAfterEdit.status === 200 && !JSON.stringify(threadAfterEdit.body).includes('Непроверенная правка'),
+      threadAfterEdit.status,
+    );
+  }
+  const queueSeen = ((await admin.request('/api/admin/moderation')).body?.vacancies ?? []) as Array<{
+    version: string;
+    vacancy: { id: string };
+  }>;
+  const seenVersion = queueSeen.find((v) => v.vacancy.id === vacancyId)?.version;
+  check('в очереди модерации есть версия вакансии', typeof seenVersion === 'string', seenVersion);
+  await company.patch(`/api/employer/vacancies/${vacancyId}`, { ...vacancyForm, title: 'Непроверенная правка 2' });
+  const staleApprove = await admin.post('/api/admin/moderation', {
+    entity: 'vacancy',
+    id: vacancyId,
+    decision: 'APPROVE',
+    version: seenVersion,
+  });
+  check('одобрить версию, которую HR не видел, нельзя', staleApprove.status === 409, staleApprove.body);
+
   const renamedCompany = await company.patch('/api/employer/company', { ...companyPage, companyName: 'Проверочная Компания Плюс' });
   check(
     'смена названия возвращает компанию на проверку',
@@ -983,6 +1037,11 @@ async function main() {
   check('в журнале есть следующий шаг по отклику', eventTypes.includes('application.next_step'), eventTypes.slice(0, 12));
   if (freshApplication) check('в журнале есть просмотр профиля', eventTypes.includes('profile.viewed'), eventTypes.slice(0, 12));
   if (severVacancy) check('в журнале есть отклик', eventTypes.includes('application.created'), eventTypes.slice(0, 12));
+  check(
+    'доля приглашённых не больше 100%',
+    Number(pilot.body?.students?.gotOpportunity) <= Number(pilot.body?.students?.applied),
+    pilot.body?.students,
+  );
   check('страница метрик пилота открывается', (await admin.request('/admin/pilot')).status === 200);
 
   // ---------- Перебор пароля ----------

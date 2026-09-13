@@ -120,6 +120,15 @@ export type RegistrationInput = z.infer<typeof registrationSchema>;
  * этого шага нужен, поэтому добавлен отдельно.
  */
 export const profileUpdateSchema = registrationSteps.identity
+  // Правило 18+ — для регистрации. Тот, кто зарегистрировался раньше по
+  // правилу 14+, должен сохранять профиль, а не оказаться заперт в анкете
+  .extend({
+    birthYear: z
+      .number({ invalid_type_error: 'Укажите год рождения' })
+      .int()
+      .min(CURRENT_YEAR - 60, 'Проверьте год')
+      .max(CURRENT_YEAR - 14, 'Проверьте год'),
+  })
   .merge(registrationSteps.photo)
   .merge(registrationSteps.education)
   .merge(registrationSteps.schedule)

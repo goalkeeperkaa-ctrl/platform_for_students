@@ -120,6 +120,8 @@ export const moderationDecisionSchema = z
     entity: z.enum(['company', 'vacancy']),
     id: z.string().min(1),
     decision: z.enum(['APPROVE', 'REJECT']),
+    // Версия вакансии, которую видел HR (время последнего изменения)
+    version: z.string().max(64).optional(),
     note: z
       .preprocess(emptyToNull, z.string().trim().max(500, 'Не длиннее 500 символов').nullable())
       .optional(),
@@ -170,6 +172,59 @@ export function readVacancyMedia<T extends { photos: string[]; videoUrl: string 
     photos: row.photos.filter((p) => COMPANY_FILE_PATTERN.test(p)),
     videoUrl: row.videoUrl && httpUrlSchema.safeParse(row.videoUrl).success ? row.videoUrl : null,
   };
+}
+
+const CONTENT_KEYS = [
+  'title',
+  'summary',
+  'responsibilities',
+  'requirements',
+  'perks',
+  'learnings',
+  'team',
+  'salaryFrom',
+  'salaryTo',
+  'salaryPeriod',
+  'city',
+  'district',
+  'workFormat',
+  'employmentType',
+  'shiftDays',
+  'hoursPerWeek',
+  'tags',
+  'photos',
+  'videoUrl',
+] as const;
+
+/** Содержимое вакансии — ровно то, что проверяет модерация. Для снимка при одобрении. */
+export function vacancyContentOf(vacancy: VacancyInput): VacancyInput {
+  return Object.fromEntries(CONTENT_KEYS.map((key) => [key, vacancy[key]])) as VacancyInput;
+}
+
+/**
+ * Снимок одобренной версии из базы. Битый снимок — null: лучше показать
+ * текущую версию, чем уронить студенту раздел «Отклики».
+ */
+export function readApprovedContent(value: unknown): VacancyInput | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = vacancyInputSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Вакансия глазами студента, который с ней уже связан: откликнулся,
+ * пропустил, переписывается.
+ *
+ * Видна в ленте — показывается как есть. Скрыта (правка ждёт проверки,
+ * компания на модерации, вакансия снята) — показывается последняя
+ * одобренная версия: непроверенный текст не должен доходить до студентов
+ * в обход модерации — ни через ленту, ни через «Отклики» и переписку.
+ */
+export function studentFacingVacancy<
+  T extends VacancyInput & { isActive: boolean; status: VacancyStatus; approvedContent: VacancyInput | null },
+>(vacancy: T, employer: { moderationStatus: ModerationStatus } | null | undefined): T {
+  if (isVacancyVisible(vacancy, employer) || !vacancy.approvedContent) return vacancy;
+  return { ...vacancy, ...vacancy.approvedContent };
 }
 
 /** Форма вакансии: числа и списки — строками, как их вводит человек. */
