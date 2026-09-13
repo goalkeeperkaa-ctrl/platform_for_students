@@ -11,6 +11,8 @@ import { useToast } from '@/components/ui/Toast';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { SkillsInput } from '@/components/forms/SkillsInput';
+import { UniversityInput } from '@/components/forms/UniversityInput';
+import { StudyVerificationNote } from '@/components/student/StudyVerificationNote';
 import { durations, easeOutExpo } from '@/lib/motion';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import { profileUpdateSchema } from '@/lib/validation';
@@ -25,6 +27,7 @@ import {
   type AchievementItem,
   type ActivityItem,
   type Gender,
+  type InstitutionOption,
   type LinkItem,
   type LookingFor,
   type ProjectItem,
@@ -52,6 +55,7 @@ export interface ProfileFormState {
   resumeUrl: string | null;
   resumeName: string | null;
   university: string;
+  institutionId: string | null;
   speciality: string;
   studyYear: number;
   city: string;
@@ -97,10 +101,14 @@ export function ProfileEditor({
   initial,
   email,
   consent,
+  institutions,
+  studyVerified,
 }: {
   initial: ProfileFormState;
   email: string;
   consent: { version: string; at: string };
+  institutions: InstitutionOption[];
+  studyVerified: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -294,11 +302,17 @@ export function ProfileEditor({
 
         <Section title="Учёба">
           <div className="space-y-5">
-            <TextField
-              label="Вуз"
+            <UniversityInput
               value={form.university}
-              error={errors.university}
-              onChange={(e) => patch({ university: e.target.value })}
+              institutionId={form.institutionId}
+              institutions={institutions}
+              error={errors.university ?? errors.institutionId}
+              onChange={(next) => patch(next)}
+            />
+            <StudyVerificationNote
+              verified={studyVerified}
+              changed={form.university !== saved.university || form.institutionId !== saved.institutionId}
+              institutionSlug={institutions.find((i) => i.id === form.institutionId)?.slug ?? null}
             />
             <TextField
               label="Специальность"

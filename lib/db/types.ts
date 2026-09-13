@@ -47,6 +47,9 @@ export interface StudentRecord extends StudentPortfolio {
   university: string;
   speciality: string;
   studyYear: number;
+  institutionId: string | null;
+  studyVerified: boolean;
+  studyVerifiedAt: Date | null;
   city: string | null;
   workDays: Weekday[];
   hoursPerWeek: number | null;
@@ -56,6 +59,19 @@ export interface StudentRecord extends StudentPortfolio {
   consentVersion: string;
   consentAt: Date;
   consentIp: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InstitutionRecord {
+  id: string;
+  slug: string;
+  name: string;
+  shortName: string | null;
+  city: string;
+  description: string | null;
+  directions: string[];
+  website: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -210,6 +226,9 @@ export interface StudentProfileUpdate extends Partial<StudentPortfolio> {
   university: string;
   speciality: string;
   studyYear: number;
+  institutionId: string | null;
+  /** false — снять подтверждение учёбы: сменился вуз. undefined — не трогать */
+  studyVerified?: boolean;
   city: string | null;
   workDays: Weekday[];
   hoursPerWeek: number | null;
@@ -236,6 +255,7 @@ export interface NewStudentInput {
   skills: string[];
   about: string | null;
   lookingFor: LookingFor[];
+  institutionId: string | null;
   consentVersion: string;
   consentIp: string | null;
 }
@@ -362,6 +382,8 @@ export interface DataStore {
     findById(id: string): Promise<StudentRecord | null>;
     list(): Promise<StudentRecord[]>;
     setStatus(id: string, status: StudentStatus): Promise<void>;
+    /** Отметка HR «учёба подтверждена». null — студента нет. */
+    setStudyVerified(id: string, verified: boolean): Promise<StudentRecord | null>;
     update(id: string, input: StudentProfileUpdate): Promise<StudentRecord>;
     /**
      * Удаление по требованию человека (152-ФЗ, право на отзыв согласия).
@@ -376,6 +398,12 @@ export interface DataStore {
      * вместе с тем, о ком они, перестаёт быть журналом.
      */
     deleteByAccountId(accountId: string): Promise<void>;
+  };
+
+  institutions: {
+    list(): Promise<InstitutionRecord[]>;
+    findById(id: string): Promise<InstitutionRecord | null>;
+    findBySlug(slug: string): Promise<InstitutionRecord | null>;
   };
 
   employers: {

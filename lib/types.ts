@@ -268,6 +268,10 @@ export interface StudentProfileDTO extends StudentPortfolio {
   university: string;
   speciality: string;
   studyYear: number;
+  /** Вуз из справочника; null — вписан вручную */
+  institutionId: string | null;
+  /** Учёбу подтвердил HR агентства */
+  studyVerified: boolean;
   city: string | null;
   workDays: Weekday[];
   hoursPerWeek: number | null;
@@ -337,6 +341,8 @@ export interface AdminStats {
   lastSync: SyncRunDTO | null;
   /** Ждут решения HR: компании, зарегистрированные сами, и вакансии из кабинетов */
   moderation: { companies: number; vacancies: number };
+  /** Студенты по учреждениям. id null — вуз вписан вручную, не из справочника */
+  institutions: Array<{ id: string | null; name: string; students: number; verified: number }>;
 }
 
 /** Вакансия в кабинете компании — все статусы, с числом откликов. */
@@ -375,6 +381,38 @@ export interface ModerationVacancyDTO {
   companyStatus: ModerationStatus;
   submittedAt: string;
   vacancy: VacancyDTO;
+}
+
+/** Вуз в подсказках при вводе. */
+export interface InstitutionOption {
+  id: string;
+  slug: string;
+  name: string;
+  shortName: string | null;
+  city: string;
+}
+
+/** Публичная страница учебного заведения. */
+export interface InstitutionPublicDTO extends InstitutionOption {
+  description: string | null;
+  directions: string[];
+  website: string | null;
+}
+
+/** Студент в панели HR. */
+export interface AdminStudentDTO {
+  id: string;
+  fullName: string;
+  photoUrl: string | null;
+  university: string;
+  institutionId: string | null;
+  speciality: string;
+  studyYear: number;
+  city: string | null;
+  status: StudentStatus;
+  studyVerified: boolean;
+  applications: number;
+  createdAt: string;
 }
 
 export interface SyncRunDTO {

@@ -2,17 +2,24 @@ import type { Metadata } from 'next';
 import { ProfileEditor } from '@/components/screens/ProfileEditor';
 import { requireStudentPage } from '@/lib/security/guards';
 import { decryptSafe } from '@/lib/security/crypto';
+import { listInstitutionOptions } from '@/lib/services';
 
 export const metadata: Metadata = { title: 'Профиль' };
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
   const { student, store } = await requireStudentPage('/profile');
-  const account = await store.accounts.findById(student.accountId);
+  const [account, institutions] = await Promise.all([
+    store.accounts.findById(student.accountId),
+    // Без справочника профиль всё равно открывается — вуз вписывается вручную
+    listInstitutionOptions().catch(() => []),
+  ]);
 
   return (
     <ProfileEditor
       email={decryptSafe(account?.emailEnc, '')}
+      institutions={institutions}
+      studyVerified={student.studyVerified}
       consent={{
         version: student.consentVersion,
         at: student.consentAt.toLocaleDateString('ru-RU', {
@@ -30,6 +37,7 @@ export default async function ProfilePage() {
         resumeUrl: student.resumeUrl,
         resumeName: student.resumeName,
         university: student.university,
+        institutionId: student.institutionId,
         speciality: student.speciality,
         studyYear: student.studyYear,
         city: student.city ?? '',

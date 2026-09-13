@@ -69,6 +69,9 @@ export const registrationSteps = {
   }),
   education: z.object({
     university: z.string().trim().min(2, 'Укажите вуз').max(160),
+    // Вуз из справочника. null — вписан вручную; undefined — клиент о
+    // справочнике не знает, и сервер решает сам (см. /api/students/me)
+    institutionId: z.string().trim().min(1).max(64).nullable().optional(),
     speciality: z.string().trim().min(2, 'Укажите специальность').max(160),
     studyYear: z.number().int().min(1, 'От 1 курса').max(6, 'До 6 курса'),
     city: z.string().trim().max(80).nullable(),
@@ -156,10 +159,17 @@ export const applicationStatusSchema = z.object({
   note: z.string().trim().max(1000).nullable().optional(),
 });
 
-export const studentStatusSchema = z.object({
-  studentId: z.string().min(1),
-  status: z.enum(STUDENT_STATUSES),
-});
+/** HR меняет студента: статус в работе и/или подтверждение учёбы. */
+export const adminStudentUpdateSchema = z
+  .object({
+    studentId: z.string().min(1),
+    status: z.enum(STUDENT_STATUSES).optional(),
+    studyVerified: z.boolean().optional(),
+  })
+  .refine((v) => v.status !== undefined || v.studyVerified !== undefined, {
+    message: 'Нечего менять',
+    path: ['_'],
+  });
 
 export const messageSchema = z.object({
   body: z

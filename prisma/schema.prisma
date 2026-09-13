@@ -163,6 +163,16 @@ model Student {
   speciality String
   studyYear  Int
 
+  // Вуз из справочника. Пусто — студент вписал свой: справочник не обязан
+  // знать каждый колледж, а регистрация не должна на этом останавливаться.
+  institutionId String?
+  institution   Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+
+  // Учёбу подтвердил HR агентства (студенческий, справка). Сбрасывается,
+  // когда студент меняет вуз: подтверждали другой.
+  studyVerified   Boolean   @default(false)
+  studyVerifiedAt DateTime?
+
   city         String?
   workDays     Weekday[] @default([])
   hoursPerWeek Int?
@@ -197,6 +207,7 @@ model Student {
 
   @@index([status])
   @@index([createdAt])
+  @@index([institutionId])
 }
 
 model Employer {
@@ -442,4 +453,24 @@ model AuditLog {
   @@index([createdAt])
   @@index([action])
   @@index([accountId])
+}
+
+/// Учебное заведение: справочник для выбора вуза и публичная страница.
+model Institution {
+  id          String   @id @default(cuid())
+  /// Адрес страницы: /institutions/<slug>
+  slug        String   @unique
+  name        String
+  /// Как вуз называют в жизни — так он и показывается в профиле и чатах
+  shortName   String?
+  city        String
+  description String?  @db.Text
+  directions  String[] @default([])
+  website     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students Student[]
+
+  @@index([city])
 }

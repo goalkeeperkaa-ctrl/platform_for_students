@@ -150,6 +150,8 @@ export function toStudentDTO(
     university: student.university,
     speciality: student.speciality,
     studyYear: student.studyYear,
+    institutionId: student.institutionId,
+    studyVerified: student.studyVerified,
     city: student.city,
     workDays: student.workDays,
     hoursPerWeek: student.hoursPerWeek,

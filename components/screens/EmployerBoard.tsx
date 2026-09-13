@@ -4,7 +4,7 @@ import { PortfolioView } from '@/components/student/PortfolioView';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown, Download, GraduationCap, Mail, MessageSquare, Phone, Sparkles } from 'lucide-react';
+import { ChevronDown, Download, GraduationCap, Mail, MessageSquare, Phone, ShieldCheck, Sparkles } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Chip';
@@ -258,6 +258,12 @@ function CandidateRow({
                   <GraduationCap className="size-3.5 shrink-0" aria-hidden />
                   {student.university}, {student.studyYear} курс
                 </span>
+                {student.studyVerified && (
+                  <Tag tone="accent">
+                    <ShieldCheck className="size-3" aria-hidden />
+                    Учёба подтверждена
+                  </Tag>
+                )}
               </p>
               <p className="mt-1 truncate text-[13px] text-paper-faint">{student.speciality}</p>
             </div>

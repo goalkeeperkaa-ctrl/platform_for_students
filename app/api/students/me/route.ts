@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { handle, ok } from '@/lib/api';
+import { fail, handle, ok } from '@/lib/api';
 import { studentName } from '@/lib/db/mappers';
 import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
@@ -24,6 +24,26 @@ export async function PATCH(request: Request) {
 
     const input = profileUpdateSchema.parse(await request.json());
 
+    // undefined — клиент, который про справочник не знает: вуз из
+    // справочника остаётся, пока не изменилось название
+    const requestedInstitution =
+      input.institutionId === undefined
+        ? input.university === student.university
+          ? student.institutionId
+          : null
+        : input.institutionId;
+    const institution = requestedInstitution ? await store.institutions.findById(requestedInstitution) : null;
+    if (requestedInstitution && !institution) {
+      return fail(400, 'Проверьте заполнение полей', 'VALIDATION', { university: 'Выберите вуз из списка заново' });
+    }
+    const university = institution ? (institution.shortName ?? institution.name) : input.university;
+
+    // Подтверждали учёбу в конкретном вузе: сменился вуз — отметка больше
+    // ни о чём не говорит
+    const resetVerification =
+      student.studyVerified &&
+      ((institution?.id ?? null) !== student.institutionId || university !== student.university);
+
     const updated = await store.students.update(student.id, {
       fullName: input.fullName,
       phone: input.phone || null,
@@ -32,7 +52,9 @@ export async function PATCH(request: Request) {
       photoUrl: input.photoUrl,
       resumeUrl: input.resumeUrl,
       resumeName: input.resumeName,
-      university: input.university,
+      university,
+      institutionId: institution?.id ?? null,
+      studyVerified: resetVerification ? false : undefined,
       speciality: input.speciality,
       studyYear: input.studyYear,
       city: input.city || null,
@@ -65,8 +87,11 @@ export async function PATCH(request: Request) {
       { action: 'student.profile.updated', entity: 'Student', entityId: student.id },
       request.headers,
     );
+    if (resetVerification) {
+      await audit(session, { action: 'student.study.reset', entity: 'Student', entityId: student.id }, request.headers);
+    }
 
-    return ok({ name });
+    return ok({ name, studyVerified: updated.studyVerified });
   });
 }
 

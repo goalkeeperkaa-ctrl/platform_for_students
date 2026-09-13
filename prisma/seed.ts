@@ -9,6 +9,7 @@ import {
   DEMO_COMPANY_PROFILES,
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
+  DEMO_INSTITUTIONS,
   DEMO_STUDENT_PROFILE,
   DEMO_VACANCY_EXTRAS,
   extraStudentEmail,
@@ -122,6 +123,16 @@ async function main() {
   );
   console.log(`  админ: ${DEMO_CREDENTIALS.admin.email}`);
 
+  // --- Справочник вузов ---
+  // Студенты связываются с ним по названию, как и в демо-хранилище
+  const institutionBySchool = new Map<string, string>();
+  for (const item of DEMO_INSTITUTIONS) {
+    const row = await prisma.institution.upsert({ where: { slug: item.slug }, update: item, create: item });
+    institutionBySchool.set(row.name, row.id);
+    if (row.shortName) institutionBySchool.set(row.shortName, row.id);
+  }
+  console.log(`  вузов в справочнике: ${DEMO_INSTITUTIONS.length}`);
+
   // --- Демо-студент ---
   const studentAccount = await upsertAccountWithPassword(
     DEMO_CREDENTIALS.student.email,
@@ -137,6 +148,9 @@ async function main() {
     university: DEMO_STUDENT_PROFILE.university,
     speciality: DEMO_STUDENT_PROFILE.speciality,
     studyYear: DEMO_STUDENT_PROFILE.studyYear,
+    institutionId: institutionBySchool.get(DEMO_STUDENT_PROFILE.university) ?? null,
+    studyVerified: true,
+    studyVerifiedAt: new Date(),
     city: DEMO_STUDENT_PROFILE.city,
     workDays: [...DEMO_STUDENT_PROFILE.workDays],
     hoursPerWeek: DEMO_STUDENT_PROFILE.hoursPerWeek,
@@ -181,6 +195,9 @@ async function main() {
       university: extra.university,
       speciality: extra.speciality,
       studyYear: 2 + (i % 3),
+      institutionId: institutionBySchool.get(extra.university) ?? null,
+      studyVerified: i % 2 === 0,
+      studyVerifiedAt: i % 2 === 0 ? new Date() : null,
       skills: [...extra.skills],
       about: null,
       // Портфолио своё, пустое: иначе через ...profile всем досталось бы

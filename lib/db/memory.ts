@@ -12,6 +12,7 @@ import {
   DEMO_COMPANY_PROFILES,
   DEMO_CREDENTIALS,
   DEMO_EXTRA_STUDENTS,
+  DEMO_INSTITUTIONS,
   DEMO_STUDENT_PROFILE,
   DEMO_VACANCY_EXTRAS,
   extraStudentEmail,
@@ -25,6 +26,7 @@ import type {
   CrmVacancyInput,
   DataStore,
   EmployerRecord,
+  InstitutionRecord,
   MessageRecord,
   NewEmployerInput,
   NewStudentInput,
@@ -49,6 +51,7 @@ import type {
 
 interface Tables {
   accounts: AccountRecord[];
+  institutions: InstitutionRecord[];
   students: StudentRecord[];
   employers: EmployerRecord[];
   vacancies: VacancyRecord[];
@@ -86,6 +89,7 @@ const EMPTY_COMPANY = {
 async function seed(): Promise<Tables> {
   const t: Tables = {
     accounts: [],
+    institutions: [],
     students: [],
     employers: [],
     vacancies: [],
@@ -168,6 +172,13 @@ async function seed(): Promise<Tables> {
   };
   t.accounts.push(adminAccount);
 
+  // --- Справочник вузов ---
+  for (const item of DEMO_INSTITUTIONS) {
+    t.institutions.push({ id: randomUUID(), ...structuredClone(item), createdAt: now(), updatedAt: now() });
+  }
+  const institutionFor = (university: string) =>
+    t.institutions.find((i) => i.shortName === university || i.name === university) ?? null;
+
   // --- Демо-студент ---
   const studentAccount: AccountRecord = {
     id: randomUUID(),
@@ -194,6 +205,10 @@ async function seed(): Promise<Tables> {
     university: DEMO_STUDENT_PROFILE.university,
     speciality: DEMO_STUDENT_PROFILE.speciality,
     studyYear: DEMO_STUDENT_PROFILE.studyYear,
+    // Учёба демо-студента подтверждена: так на демо видна отметка у работодателя
+    institutionId: institutionFor(DEMO_STUDENT_PROFILE.university)?.id ?? null,
+    studyVerified: true,
+    studyVerifiedAt: now(),
     city: DEMO_STUDENT_PROFILE.city,
     workDays: [...DEMO_STUDENT_PROFILE.workDays],
     hoursPerWeek: DEMO_STUDENT_PROFILE.hoursPerWeek,
@@ -242,6 +257,9 @@ async function seed(): Promise<Tables> {
       university: extra.university,
       speciality: extra.speciality,
       studyYear: 2 + (i % 3),
+      institutionId: institutionFor(extra.university)?.id ?? null,
+      studyVerified: i % 2 === 0,
+      studyVerifiedAt: i % 2 === 0 ? now() : null,
       skills: [...extra.skills],
       status: extra.status,
       about: null,
@@ -421,6 +439,10 @@ export async function createMemoryStore(): Promise<DataStore> {
           university: input.university,
           speciality: input.speciality,
           studyYear: input.studyYear,
+          institutionId: input.institutionId,
+          // Учёбу подтверждает HR, а не форма регистрации
+          studyVerified: false,
+          studyVerifiedAt: null,
           city: input.city,
           workDays: input.workDays,
           hoursPerWeek: input.hoursPerWeek,
@@ -455,6 +477,14 @@ export async function createMemoryStore(): Promise<DataStore> {
           s.updatedAt = now();
         }
       },
+      async setStudyVerified(id, verified) {
+        const s = t.students.find((x) => x.id === id);
+        if (!s) return null;
+        s.studyVerified = verified;
+        s.studyVerifiedAt = verified ? now() : null;
+        s.updatedAt = now();
+        return clone(s);
+      },
 
       async update(id, input) {
         const s = t.students.find((x) => x.id === id);
@@ -471,6 +501,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           university: input.university,
           speciality: input.speciality,
           studyYear: input.studyYear,
+          institutionId: input.institutionId,
           city: input.city,
           workDays: [...input.workDays],
           hoursPerWeek: input.hoursPerWeek,
@@ -487,6 +518,11 @@ export async function createMemoryStore(): Promise<DataStore> {
         for (const key of portfolioKeys) {
           const value = input[key];
           if (value !== undefined) Object.assign(s, { [key]: structuredClone(value) });
+        }
+        // Подтверждение учёбы снимает только явное false — сменился вуз
+        if (input.studyVerified === false) {
+          s.studyVerified = false;
+          s.studyVerifiedAt = null;
         }
         return clone(s);
       },
@@ -508,6 +544,20 @@ export async function createMemoryStore(): Promise<DataStore> {
         // Журнал аудита переживает удаление, как и в базе: запись остаётся,
         // ссылка на учётную запись обнуляется
         for (const entry of t.audit) if (entry.accountId === accountId) entry.accountId = null;
+      },
+    },
+
+    institutions: {
+      async list() {
+        return clone(
+          [...t.institutions].sort((a, b) => a.city.localeCompare(b.city, 'ru') || a.name.localeCompare(b.name, 'ru')),
+        );
+      },
+      async findById(id) {
+        return clone(t.institutions.find((i) => i.id === id) ?? null);
+      },
+      async findBySlug(slug) {
+        return clone(t.institutions.find((i) => i.slug === slug) ?? null);
       },
     },
 

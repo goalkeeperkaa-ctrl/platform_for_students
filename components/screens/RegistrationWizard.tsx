@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/Toast';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { SkillsInput } from '@/components/forms/SkillsInput';
+import { UniversityInput } from '@/components/forms/UniversityInput';
 import { useCurtainNav } from '@/components/motion/RouteCurtain';
 import { durations, easeOutExpo, springSoft, stepVariants } from '@/lib/motion';
 import { registrationSteps } from '@/lib/validation';
@@ -24,6 +25,7 @@ import {
   WEEKDAYS,
   WEEKDAY_LABEL,
   type Gender,
+  type InstitutionOption,
   type LookingFor,
   type Weekday,
 } from '@/lib/types';
@@ -53,6 +55,7 @@ interface FormState {
   birthYear: number;
   photoUrl: string | null;
   university: string;
+  institutionId: string | null;
   speciality: string;
   studyYear: number;
   city: string;
@@ -75,6 +78,7 @@ const INITIAL: FormState = {
   birthYear: CURRENT_YEAR - 19,
   photoUrl: null,
   university: '',
+  institutionId: null,
   speciality: '',
   studyYear: 1,
   city: 'Москва',
@@ -103,7 +107,7 @@ const INITIAL: FormState = {
  * приезжает справа, назад — слева. Это единственное, что подсказывает,
  * что шаги лежат на одной оси, а не подменяют друг друга.
  */
-export function RegistrationWizard() {
+export function RegistrationWizard({ institutions }: { institutions: InstitutionOption[] }) {
   const toast = useToast();
   const navigate = useCurtainNav();
 
@@ -138,6 +142,7 @@ export function RegistrationWizard() {
       case 'education':
         return {
           university: form.university,
+          institutionId: form.institutionId,
           speciality: form.speciality,
           studyYear: form.studyYear,
           city: form.city || null,
@@ -366,13 +371,13 @@ export function RegistrationWizard() {
       case 'education':
         return (
           <div className="space-y-5">
-            <TextField
-              label="Вуз"
+            <UniversityInput
               autoFocus
               value={form.university}
-              error={errors.university}
-              onChange={(e) => patch({ university: e.target.value })}
-              hint="Например, НИУ ВШЭ"
+              institutionId={form.institutionId}
+              institutions={institutions}
+              error={errors.university ?? errors.institutionId}
+              onChange={(next) => patch(next)}
             />
             <TextField
               label="Специальность"

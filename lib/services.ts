@@ -2,12 +2,15 @@ import 'server-only';
 import { getStore } from '@/lib/db';
 import { scoreMatch, studentName, toStudentDTO, toVacancyDTO } from '@/lib/db/mappers';
 import { decryptSafe } from '@/lib/security/crypto';
-import type { EmployerRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
+import type { EmployerRecord, InstitutionRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
 import { isVacancyVisible } from '@/lib/vacancy';
 import {
   APPLICATION_STATUSES,
   STUDENT_STATUSES,
   type AdminStats,
+  type AdminStudentDTO,
+  type InstitutionOption,
+  type InstitutionPublicDTO,
   type ApplicationDTO,
   type ApplicationStatus,
   type AuditEntryDTO,
@@ -221,15 +224,17 @@ export async function buildEmployerBoard(employerId: string): Promise<EmployerBo
 
 export async function buildAdminStats(): Promise<AdminStats> {
   const store = await getStore();
-  const [students, applications, swipes, vacancyCounts, employers, lastSync, pendingVacancies] = await Promise.all([
-    store.students.list(),
-    store.applications.listAll(),
-    store.swipes.countByDirection(),
-    store.vacancies.countAll(),
-    employerIndex(),
-    store.syncRuns.latest(),
-    store.vacancies.listByStatus('PENDING'),
-  ]);
+  const [students, applications, swipes, vacancyCounts, employers, lastSync, pendingVacancies, schools] =
+    await Promise.all([
+      store.students.list(),
+      store.applications.listAll(),
+      store.swipes.countByDirection(),
+      store.vacancies.countAll(),
+      employerIndex(),
+      store.syncRuns.latest(),
+      store.vacancies.listByStatus('PENDING'),
+      store.institutions.list(),
+    ]);
 
   const byStudentStatus = Object.fromEntries(
     STUDENT_STATUSES.map((s) => [s, 0]),
@@ -273,6 +278,19 @@ export async function buildAdminStats(): Promise<AdminStats> {
     })
     .slice(0, 12);
 
+  // Студенты по учреждениям. Вписанные вручную — одной строкой: по ней
+  // видно, насколько справочник покрывает реальных студентов
+  const schoolName = new Map(schools.map((i) => [i.id, i.shortName ?? i.name]));
+  const bySchool = new Map<string, AdminStats['institutions'][number]>();
+  for (const s of students) {
+    const id = s.institutionId && schoolName.has(s.institutionId) ? s.institutionId : null;
+    const key = id ?? 'OTHER';
+    const row = bySchool.get(key) ?? { id, name: id ? (schoolName.get(id) ?? 'Вуз') : 'Не из справочника', students: 0, verified: 0 };
+    row.students++;
+    if (s.studyVerified) row.verified++;
+    bySchool.set(key, row);
+  }
+
   const hired = byApplicationStatus.HIRED;
 
   return {
@@ -292,6 +310,7 @@ export async function buildAdminStats(): Promise<AdminStats> {
       companies: Array.from(employers.values()).filter((e) => e.moderationStatus === 'PENDING').length,
       vacancies: pendingVacancies.length,
     },
+    institutions: Array.from(bySchool.values()).sort((a, b) => b.students - a.students),
     inProgress,
     lastSync: lastSync ? toSyncRunDTO(lastSync) : null,
   };
@@ -471,4 +490,70 @@ export async function buildModerationQueue(): Promise<ModerationQueue> {
   });
 
   return { companies, vacancies };
+}
+
+/** Сколько ждёт решения HR — для счётчика в навигации панели. */
+export async function countPendingModeration(): Promise<number> {
+  const store = await getStore();
+  const [employers, vacancies] = await Promise.all([store.employers.list(), store.vacancies.listByStatus('PENDING')]);
+  return employers.filter((e) => e.moderationStatus === 'PENDING').length + vacancies.length;
+}
+
+function toInstitutionPublic(item: InstitutionRecord): InstitutionPublicDTO {
+  return {
+    id: item.id,
+    slug: item.slug,
+    name: item.name,
+    shortName: item.shortName,
+    city: item.city,
+    description: item.description,
+    directions: item.directions,
+    website: item.website,
+  };
+}
+
+/** Справочник вузов для подсказок при вводе. */
+export async function listInstitutionOptions(): Promise<InstitutionOption[]> {
+  const store = await getStore();
+  return (await store.institutions.list()).map(({ id, slug, name, shortName, city }) => ({
+    id,
+    slug,
+    name,
+    shortName,
+    city,
+  }));
+}
+
+export async function listInstitutionsPublic(): Promise<InstitutionPublicDTO[]> {
+  const store = await getStore();
+  return (await store.institutions.list()).map(toInstitutionPublic);
+}
+
+export async function getInstitutionPublic(slug: string): Promise<InstitutionPublicDTO | null> {
+  const store = await getStore();
+  const item = await store.institutions.findBySlug(slug);
+  return item ? toInstitutionPublic(item) : null;
+}
+
+/** Студенты для панели HR, новые первыми, с числом откликов. */
+export async function listAdminStudents(): Promise<AdminStudentDTO[]> {
+  const store = await getStore();
+  const [students, applications] = await Promise.all([store.students.list(), store.applications.listAll()]);
+  const counts = new Map<string, number>();
+  for (const a of applications) counts.set(a.studentId, (counts.get(a.studentId) ?? 0) + 1);
+
+  return students.map((s) => ({
+    id: s.id,
+    fullName: studentName(s),
+    photoUrl: s.photoUrl,
+    university: s.university,
+    institutionId: s.institutionId,
+    speciality: s.speciality,
+    studyYear: s.studyYear,
+    city: s.city,
+    status: s.status,
+    studyVerified: s.studyVerified,
+    applications: counts.get(s.id) ?? 0,
+    createdAt: s.createdAt.toISOString(),
+  }));
 }

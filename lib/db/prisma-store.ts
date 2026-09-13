@@ -93,6 +93,7 @@ export function createPrismaStore(): DataStore {
                   university: input.university,
                   speciality: input.speciality,
                   studyYear: input.studyYear,
+                  institutionId: input.institutionId,
                   city: input.city,
                   workDays: input.workDays,
                   hoursPerWeek: input.hoursPerWeek,
@@ -131,6 +132,15 @@ export function createPrismaStore(): DataStore {
       async setStatus(id, status) {
         await prisma.student.update({ where: { id }, data: { status } });
       },
+      async setStudyVerified(id, verified) {
+        const exists = await prisma.student.findUnique({ where: { id }, select: { id: true } });
+        if (!exists) return null;
+        const row = await prisma.student.update({
+          where: { id },
+          data: { studyVerified: verified, studyVerifiedAt: verified ? new Date() : null },
+        });
+        return toStudentRecord(row);
+      },
 
       async update(id, input) {
         const row = await prisma.student.update({
@@ -149,6 +159,7 @@ export function createPrismaStore(): DataStore {
             university: input.university,
             speciality: input.speciality,
             studyYear: input.studyYear,
+            institutionId: input.institutionId,
             city: input.city,
             workDays: input.workDays,
             hoursPerWeek: input.hoursPerWeek,
@@ -163,6 +174,8 @@ export function createPrismaStore(): DataStore {
             hobbies: input.hobbies,
             links: json(input.links),
             videoUrl: input.videoUrl,
+            // Подтверждение учёбы снимает только явное false — сменился вуз
+            ...(input.studyVerified === false ? { studyVerified: false, studyVerifiedAt: null } : {}),
           },
         });
         return toStudentRecord(row);
@@ -173,6 +186,12 @@ export function createPrismaStore(): DataStore {
         // Журнал аудита остаётся: у него ссылка обнуляется, а не удаляется.
         await prisma.account.delete({ where: { id: accountId } });
       },
+    },
+
+    institutions: {
+      list: () => prisma.institution.findMany({ orderBy: [{ city: 'asc' }, { name: 'asc' }] }),
+      findById: (id) => prisma.institution.findUnique({ where: { id } }),
+      findBySlug: (slug) => prisma.institution.findUnique({ where: { slug } }),
     },
 
     employers: {

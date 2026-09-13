@@ -21,6 +21,15 @@ export async function POST(request: Request) {
     const input = registrationSchema.parse(await request.json());
     const store = await getStore();
 
+    // Вуз из справочника сверяется с базой, и название берётся оттуда, а не
+    // из поля ввода: иначе «вышка» и «НИУ ВШЭ» считались бы разными вузами
+    const institution = input.institutionId ? await store.institutions.findById(input.institutionId) : null;
+    if (input.institutionId && !institution) {
+      return fail(400, 'Вуз из списка не найден — выберите его заново на шаге «Где вы учитесь»', 'VALIDATION', {
+        university: 'Выберите вуз из списка заново',
+      });
+    }
+
     try {
       const { account, student } = await store.students.createWithAccount({
         email: input.email,
@@ -32,7 +41,8 @@ export async function POST(request: Request) {
         photoUrl: input.photoUrl,
         resumeUrl: input.resumeUrl,
         resumeName: input.resumeName,
-        university: input.university,
+        university: institution ? (institution.shortName ?? institution.name) : input.university,
+        institutionId: institution?.id ?? null,
         speciality: input.speciality,
         studyYear: input.studyYear,
         city: input.city,

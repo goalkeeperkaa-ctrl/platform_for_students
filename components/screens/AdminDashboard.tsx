@@ -90,6 +90,8 @@ export function AdminDashboard({
     tone: status === 'PLACED' ? 'good' : status === 'PAUSED' ? 'muted' : 'default',
   }));
 
+  const verifiedTotal = stats.institutions.reduce((sum, row) => sum + row.verified, 0);
+
   return (
     <>
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -216,6 +218,42 @@ export function AdminDashboard({
             Доля свайпов вправо — качество подборки. Если она падает ниже 30%, лента показывает
             студентам не то: стоит проверить фильтры графика и города.
           </p>
+        </Panel>
+      </section>
+
+      {/* ---------- УЧЕБНЫЕ ЗАВЕДЕНИЯ ---------- */}
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Panel title="Студенты по учреждениям" subtitle="Из справочника вузов и вписанные вручную">
+          {stats.institutions.length === 0 ? (
+            <p className="text-[13.5px] text-paper-faint">Студентов пока нет.</p>
+          ) : (
+            <BarList
+              items={stats.institutions.slice(0, 8).map((row) => ({
+                key: row.id ?? 'OTHER',
+                label: row.name,
+                value: row.students,
+                tone: row.id ? 'default' : 'muted',
+              }))}
+              total={stats.students.total}
+              unit={['студент', 'студента', 'студентов']}
+            />
+          )}
+        </Panel>
+
+        <Panel title="Подтверждение учёбы" subtitle="Отметку ставит HR в разделе «Студенты»">
+          <ShareBar
+            label="Всего студентов"
+            filledLabel="Подтверждена"
+            restLabel="Не подтверждена"
+            filled={verifiedTotal}
+            rest={Math.max(0, stats.students.total - verifiedTotal)}
+          />
+          <Link
+            href="/admin/students"
+            className="mt-6 inline-flex text-[13px] text-paper/80 underline-offset-4 transition-colors hover:text-paper hover:underline"
+          >
+            Открыть список студентов →
+          </Link>
         </Panel>
       </section>
 

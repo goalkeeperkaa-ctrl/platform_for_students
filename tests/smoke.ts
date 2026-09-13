@@ -563,6 +563,75 @@ async function main() {
     partial.status,
   );
 
+  // ---------- Учебные заведения ----------
+  const institutionsList = await new Session().request('/api/institutions');
+  const schools = (institutionsList.body?.institutions ?? []) as Array<{ id: string; slug: string }>;
+  check('справочник вузов открыт', institutionsList.status === 200 && schools.length >= 10, schools.length);
+  check('список вузов открывается', String((await new Session().request('/institutions')).body).includes('НИУ ВШЭ'));
+  const hsePage = await new Session().request('/institutions/hse');
+  check('страница вуза открывается', hsePage.status === 200 && String(hsePage.body).includes('Высшая школа экономики'), hsePage.status);
+  check('несуществующий вуз — 404', (await new Session().request('/institutions/no-such-school')).status === 404);
+
+  const ownerId = (await owner.request('/api/auth/me')).body.session?.profileId as string;
+  const findOwner = async () =>
+    (((await admin.request('/api/admin/students')).body?.students ?? []) as Array<Record<string, any>>).find(
+      (s) => s.id === ownerId,
+    );
+  const bogusSchool = await owner.patch('/api/students/me', {
+    ...ownerProfile,
+    fullName: 'Профиль Изменённый',
+    institutionId: 'no-such-institution',
+  });
+  check('несуществующий вуз из справочника отвергнут', bogusSchool.status === 400 && !!bogusSchool.body?.fields?.university, bogusSchool.body);
+
+  const hse = schools.find((s) => s.slug === 'hse');
+  check('ВШЭ есть в справочнике', !!hse);
+  if (hse) {
+    const picked = await owner.patch('/api/students/me', {
+      ...ownerProfile,
+      fullName: 'Профиль Изменённый',
+      university: 'вышка',
+      institutionId: hse.id,
+    });
+    check('вуз из справочника сохраняется', picked.status === 200, picked.body);
+    const afterPick = await findOwner();
+    check('название вуза берётся из справочника', afterPick?.university === 'НИУ ВШЭ' && afterPick?.institutionId === hse.id, afterPick);
+
+    check('студент не подтверждает учёбу сам', (await owner.patch('/api/admin/students', { studentId: ownerId, studyVerified: true })).status === 401);
+    check('работодатель не подтверждает учёбу', (await employer.patch('/api/admin/students', { studentId: ownerId, studyVerified: true })).status === 401);
+    const verified = await admin.patch('/api/admin/students', { studentId: ownerId, studyVerified: true });
+    check('HR подтверждает учёбу', verified.status === 200 && (await findOwner())?.studyVerified === true, verified.body);
+
+    await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', university: 'НИУ ВШЭ', institutionId: hse.id });
+    check('сохранение без смены вуза отметку не снимает', (await findOwner())?.studyVerified === true);
+
+    const moved = await owner.patch('/api/students/me', {
+      ...ownerProfile,
+      fullName: 'Профиль Изменённый',
+      university: 'Колледж связи',
+      institutionId: null,
+    });
+    const afterMove = await findOwner();
+    check(
+      'смена вуза снимает подтверждение учёбы',
+      moved.status === 200 && afterMove?.studyVerified === false && afterMove?.institutionId === null,
+      afterMove,
+    );
+  }
+  check('HR открывает список студентов', (await admin.request('/admin/students')).status === 200);
+  const statsWithSchools = (await admin.request('/api/admin/stats')).body;
+  check(
+    'в статистике есть студенты по вузам',
+    Array.isArray(statsWithSchools?.institutions ?? statsWithSchools?.stats?.institutions),
+    statsWithSchools,
+  );
+  const boardWithSchool = await employer.request('/api/employer/applications');
+  check(
+    'работодатель видит отметку о подтверждении учёбы',
+    typeof boardWithSchool.body?.applications?.[0]?.student?.studyVerified === 'boolean',
+  );
+  check('на регистрации есть справочник вузов', String((await new Session().request('/register')).body).includes('МГТУ им. Баумана'));
+
   const erased = await owner.delete('/api/students/me', {});
   check('профиль удаляется', erased.status === 200, erased.body);
   check('после удаления сессии нет', (await owner.request('/api/auth/me')).body.session === null);
