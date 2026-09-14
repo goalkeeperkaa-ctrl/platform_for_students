@@ -86,6 +86,10 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         <div className="mb-9 flex justify-center">
           <Logo />
         </div>
+        {/* Заголовка на экране нет — его роль играет логотип. Экранному
+            диктору без h1 не за что зацепиться: страница звучит как набор
+            полей без названия. */}
+        <h1 className="sr-only">Вход в Fattakhov HR Agency</h1>
 
         {/* Пришли с /logout?reason=stale: сессия ссылалась на аккаунт,
             которого больше нет. Без пояснения человек видит форму входа
