@@ -60,6 +60,22 @@ export async function requireEmployer() {
 }
 
 /**
+ * Действие, для которого нужна подтверждённая почта, — отправка вакансии
+ * на проверку. Смотреть кабинет и готовить черновики можно и без неё.
+ */
+export async function assertEmailVerified(accountId: string): Promise<void> {
+  const store = await getStore();
+  const account = await store.accounts.findById(accountId);
+  if (!account?.emailVerifiedAt) {
+    throw new HttpError(
+      403,
+      'Сначала подтвердите почту — код пришёл в письме. Отправить его снова можно вверху страницы.',
+      'EMAIL_NOT_VERIFIED',
+    );
+  }
+}
+
+/**
  * Гварды для серверных компонентов.
  *
  * В API-роуте отсутствие профиля — честный 403 в JSON. На странице то же

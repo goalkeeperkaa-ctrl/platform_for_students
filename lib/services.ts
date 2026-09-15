@@ -9,7 +9,7 @@ import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import { isFreeEmail } from '@/lib/company';
 import { PILOT_CITY } from '@/lib/pilot';
 import { rankInstitutions, type RatingRow } from '@/lib/rating';
-import { isPendingExpired, pendingExpiresAt, studyDocDeadline, studyStatus, workdaysLeft } from '@/lib/study';
+import { applicationsOpen, isPendingExpired, pendingExpiresAt, studyDocDeadline, studyStatus, workdaysLeft } from '@/lib/study';
 import {
   APPLICATION_STATUSES,
   EVENT_LABEL,
@@ -721,7 +721,9 @@ async function expirePendingSwipes(studentId: string): Promise<{ student: Studen
     store.swipes.listByStudent(studentId, 'RIGHT'),
     store.applications.listByStudent(studentId),
   ]);
-  if (!student || student.studyVerified) return { student, waiting: [] };
+  // Ждут, пока не подтверждены и учёба, и почта
+  const account = student ? await store.accounts.findById(student.accountId) : null;
+  if (!student || applicationsOpen(student, account)) return { student, waiting: [] };
   const applied = new Set(applications.map((a) => a.vacancyId));
   const now = new Date();
   const waiting: SwipeRecord[] = [];
@@ -736,6 +738,11 @@ async function expirePendingSwipes(studentId: string): Promise<{ student: Studen
 /** Сколько откликов ждёт подтверждения учёбы — для счётчика во вкладке. */
 export async function countWaitingApplications(studentId: string): Promise<number> {
   return (await expirePendingSwipes(studentId)).waiting.length;
+}
+
+/** Свайпы, которые ждут подтверждения, — для напоминаний (lib/notify.ts). */
+export async function listWaitingSwipes(studentId: string): Promise<SwipeRecord[]> {
+  return (await expirePendingSwipes(studentId)).waiting;
 }
 
 /** Ожидающие отклики с карточкой вакансии и сроком, когда удалятся. */
@@ -768,9 +775,10 @@ export async function listPendingApplications(studentId: string): Promise<Pendin
  *
  * Вакансия, которую за это время сняли или вернули на проверку, пропускается,
  * и свайп по ней удаляется: откликнуться на неё сейчас нельзя, а в ленту она
- * вернётся, когда её снова опубликуют. Возвращает, сколько откликов ушло.
+ * вернётся, когда её снова опубликуют. Возвращает id ушедших откликов —
+ * по ним компаниям уходят письма.
  */
-export async function releasePendingApplications(studentId: string): Promise<number> {
+export async function releasePendingApplications(studentId: string): Promise<string[]> {
   const store = await getStore();
   const [student, rights, applications, employers] = await Promise.all([
     store.students.findById(studentId),
@@ -778,15 +786,18 @@ export async function releasePendingApplications(studentId: string): Promise<num
     store.applications.listByStudent(studentId),
     employerIndex(),
   ]);
-  if (!student) return 0;
+  if (!student) return [];
+  // Уходят, только когда подтверждены и учёба, и почта — что бы из двух ни подтвердили последним
+  const account = await store.accounts.findById(student.accountId);
+  if (!applicationsOpen(student, account)) return [];
   const applied = new Set(applications.map((a) => a.vacancyId));
   const waiting = rights.filter((s) => !applied.has(s.vacancyId));
-  if (waiting.length === 0) return 0;
+  if (waiting.length === 0) return [];
 
   const vacancies = await store.vacancies.findManyByIds(waiting.map((s) => s.vacancyId));
   const byId = new Map(vacancies.map((v) => [v.id, v]));
   const now = new Date();
-  let released = 0;
+  const released: string[] = [];
   for (const swipe of waiting) {
     const vacancy = byId.get(swipe.vacancyId);
     if (!vacancy || isPendingExpired(swipe.createdAt, now) || !isVacancyVisible(vacancy, employers.get(vacancy.employerId))) {
@@ -800,9 +811,9 @@ export async function releasePendingApplications(studentId: string): Promise<num
       vacancyId: vacancy.id,
       applicationId: application.id,
     });
-    released++;
+    released.push(application.id);
   }
-  if (released > 0 && student.status === 'ACTIVE') await store.students.setStatus(studentId, 'IN_PROGRESS');
+  if (released.length > 0 && student.status === 'ACTIVE') await store.students.setStatus(studentId, 'IN_PROGRESS');
   return released;
 }
 

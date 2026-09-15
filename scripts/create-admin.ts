@@ -89,7 +89,7 @@ async function main() {
     await prisma.account.upsert({
       where: { emailHash },
       update: { passwordHash, isActive: true },
-      create: { role: 'ADMIN', emailEnc: encrypt(email), emailHash, passwordHash },
+      create: { role: 'ADMIN', emailEnc: encrypt(email), emailHash, passwordHash, emailVerifiedAt: new Date() },
     });
 
     console.log(existing ? `\nПароль для ${email} обновлён.\n` : `\nHR-менеджер ${email} создан.\n`);

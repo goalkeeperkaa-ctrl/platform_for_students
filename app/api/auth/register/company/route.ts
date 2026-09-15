@@ -4,6 +4,7 @@ import { getStore, isAccountExistsError, isInnExistsError } from '@/lib/db';
 import { companyRegistrationSchema } from '@/lib/company';
 import { COMPANY_CONSENT_VERSION, TERMS_VERSION } from '@/lib/legal';
 import { track } from '@/lib/analytics';
+import { sendEmailCode } from '@/lib/account-email';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
@@ -77,6 +78,9 @@ export async function POST(request: Request) {
         request.headers,
       );
       await track('company.registered', { employerId: employer.id });
+      // Код подтверждения — сразу. Сбой почты регистрацию не отменяет:
+      // код можно запросить заново из кабинета
+      await sendEmailCode(account.id).catch((error: unknown) => console.error('[почта] код не отправлен:', error));
 
       // Сразу на страницу компании: без неё студент увидит пустую карточку
       return ok({ redirectTo: '/employer/company', moderationStatus: employer.moderationStatus }, { status: 201 });

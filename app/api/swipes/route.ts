@@ -3,6 +3,8 @@ import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { rateLimit } from '@/lib/security/rate-limit';
 import { swipeSchema, undoSwipeSchema } from '@/lib/validation';
 import { isVacancyVisible } from '@/lib/vacancy';
+import { notifyNewApplications } from '@/lib/notify';
+import { applicationsOpen } from '@/lib/study';
 import { track } from '@/lib/analytics';
 
 export const runtime = 'nodejs';
@@ -15,9 +17,9 @@ export const runtime = 'nodejs';
  * одном запросе. Разъехавшись, они дали бы студенту вакансию в
  * «Откликах», которой работодатель не видит.
  *
- * Исключение — студент, чью учёбу HR ещё не подтвердил. Его свайп вправо
+ * Исключение — студент, у которого не подтверждены учёба или почта. Его свайп вправо
  * сохраняется, но отклик не создаётся: работодатель видит только
- * проверенных студентов. Когда учёбу подтвердят, ожидающие отклики уйдут
+ * проверенных студентов. Когда подтверждено и то и другое, ожидающие отклики уйдут
  * сами (см. releasePendingApplications).
  */
 export async function POST(request: Request) {
@@ -41,15 +43,18 @@ export async function POST(request: Request) {
     await store.swipes.create({ studentId: student.id, vacancyId, direction });
 
     if (direction === 'RIGHT') {
+      const account = await store.accounts.findById(session.accountId);
+      const open = applicationsOpen(student, account);
       // Отклик, отправленный до того, как подтверждение сняли (сменился вуз),
       // остаётся откликом: работодатель уже видел этого студента
-      const existing = student.studyVerified
+      const existing = open
         ? null
         : (await store.applications.listByStudent(student.id)).find((a) => a.vacancyId === vacancyId);
 
-      if (!student.studyVerified && !existing) {
+      if (!open && !existing) {
         await audit(session, { action: 'application.pending', entity: 'Vacancy', entityId: vacancyId }, request.headers);
-        return ok({ applied: false, pending: true });
+        // Чего ждём — чтобы подсказка на экране называла нужный шаг
+        return ok({ applied: false, pending: true, reason: student.studyVerified ? 'EMAIL' : 'STUDY' });
       }
 
       const application = await store.applications.upsert({ studentId: student.id, vacancyId });
@@ -66,6 +71,7 @@ export async function POST(request: Request) {
         { action: 'application.created', entity: 'Application', entityId: application.id, meta: { vacancyId } },
         request.headers,
       );
+      await notifyNewApplications([application.id]);
       return ok({ applied: true, applicationId: application.id });
     }
 

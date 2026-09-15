@@ -21,6 +21,7 @@ import {
 import type {
   AccessCodeRecord,
   AccountRecord,
+  AuthTokenRecord,
   ApplicationRecord,
   AuditRecord,
   CrmVacancyInput,
@@ -63,6 +64,8 @@ interface Tables {
   syncRuns: SyncRunRecord[];
   audit: AuditRecord[];
   events: EventRecord[];
+  authTokens: AuthTokenRecord[];
+  notificationLog: Array<{ accountId: string; key: string; createdAt: Date }>;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -104,6 +107,8 @@ async function seed(): Promise<Tables> {
     syncRuns: [],
     audit: [],
     events: [],
+    authTokens: [],
+    notificationLog: [],
   };
 
   // --- Работодатели и вакансии из «CRM» ---
@@ -123,6 +128,8 @@ async function seed(): Promise<Tables> {
         termsAcceptedAt: null,
         marketingConsentAt: null,
         tourSeenAt: null,
+        emailVerifiedAt: now(),
+        notifyEmail: true,
         createdAt: now(),
       };
       t.accounts.push(account);
@@ -181,6 +188,8 @@ async function seed(): Promise<Tables> {
     termsAcceptedAt: null,
     marketingConsentAt: null,
     tourSeenAt: null,
+    emailVerifiedAt: now(),
+    notifyEmail: true,
     createdAt: now(),
   };
   t.accounts.push(adminAccount);
@@ -205,6 +214,8 @@ async function seed(): Promise<Tables> {
     termsAcceptedAt: null,
     marketingConsentAt: null,
     tourSeenAt: null,
+    emailVerifiedAt: now(),
+    notifyEmail: true,
     createdAt: now(),
   };
   t.accounts.push(studentAccount);
@@ -269,6 +280,8 @@ async function seed(): Promise<Tables> {
       termsAcceptedAt: null,
       marketingConsentAt: null,
       tourSeenAt: null,
+      emailVerifiedAt: now(),
+      notifyEmail: true,
       createdAt: now(),
     };
     t.accounts.push(acc);
@@ -442,6 +455,18 @@ export async function createMemoryStore(): Promise<DataStore> {
         const acc = t.accounts.find((a) => a.id === id);
         if (acc) acc.lastLoginAt = now();
       },
+      async markEmailVerified(id) {
+        const acc = t.accounts.find((a) => a.id === id);
+        if (acc && !acc.emailVerifiedAt) acc.emailVerifiedAt = now();
+      },
+      async setPassword(id, passwordHash) {
+        const acc = t.accounts.find((a) => a.id === id);
+        if (acc) acc.passwordHash = passwordHash;
+      },
+      async setNotifyEmail(id, enabled) {
+        const acc = t.accounts.find((a) => a.id === id);
+        if (acc) acc.notifyEmail = enabled;
+      },
     },
 
     students: {
@@ -462,6 +487,8 @@ export async function createMemoryStore(): Promise<DataStore> {
           termsAcceptedAt: null,
           marketingConsentAt: null,
           tourSeenAt: null,
+          emailVerifiedAt: null,
+          notifyEmail: true,
           createdAt: now(),
         };
         const student: StudentRecord = {
@@ -662,6 +689,8 @@ export async function createMemoryStore(): Promise<DataStore> {
           termsAcceptedAt: null,
           marketingConsentAt: null,
           tourSeenAt: null,
+          emailVerifiedAt: null,
+          notifyEmail: true,
           createdAt: now(),
         };
         const employer: EmployerRecord = {
@@ -788,6 +817,8 @@ export async function createMemoryStore(): Promise<DataStore> {
               termsAcceptedAt: null,
               marketingConsentAt: null,
               tourSeenAt: null,
+              emailVerifiedAt: now(),
+              notifyEmail: true,
               createdAt: now(),
             };
             t.accounts.push(account);
@@ -970,6 +1001,11 @@ export async function createMemoryStore(): Promise<DataStore> {
         }
         return count;
       },
+      async listUnreadBefore(before) {
+        return clone(
+          t.messages.filter((m) => !m.readAt && m.createdAt < before).sort((a, b) => +a.createdAt - +b.createdAt),
+        );
+      },
       async unreadFor(applicationIds, reader) {
         const wanted = new Set(applicationIds);
         const out: Record<string, number> = {};
@@ -1041,6 +1077,53 @@ export async function createMemoryStore(): Promise<DataStore> {
       },
       async list(limit) {
         return clone([...t.syncRuns].sort((a, b) => +b.startedAt - +a.startedAt).slice(0, limit));
+      },
+    },
+
+    authTokens: {
+      async issue({ accountId, kind, tokenHash, expiresAt }) {
+        t.authTokens = t.authTokens.filter((x) => !(x.accountId === accountId && x.kind === kind && !x.usedAt));
+        const record: AuthTokenRecord = {
+          id: randomUUID(),
+          accountId,
+          kind,
+          tokenHash,
+          attempts: 0,
+          expiresAt,
+          usedAt: null,
+          createdAt: now(),
+        };
+        t.authTokens.push(record);
+        return clone(record);
+      },
+      async latest(accountId, kind) {
+        const rows = t.authTokens
+          .filter((x) => x.accountId === accountId && x.kind === kind && !x.usedAt)
+          .sort((a, b) => +b.createdAt - +a.createdAt);
+        return clone(rows[0] ?? null);
+      },
+      async findActiveByHash(kind, tokenHash) {
+        return clone(t.authTokens.find((x) => x.kind === kind && x.tokenHash === tokenHash && !x.usedAt) ?? null);
+      },
+      async recordFailure(id) {
+        const row = t.authTokens.find((x) => x.id === id);
+        if (!row) return 0;
+        row.attempts += 1;
+        return row.attempts;
+      },
+      async consume(id) {
+        const row = t.authTokens.find((x) => x.id === id);
+        if (!row || row.usedAt) return false;
+        row.usedAt = now();
+        return true;
+      },
+    },
+
+    notifications: {
+      async claim(accountId, key) {
+        if (t.notificationLog.some((n) => n.accountId === accountId && n.key === key)) return false;
+        t.notificationLog.push({ accountId, key, createdAt: now() });
+        return true;
       },
     },
 

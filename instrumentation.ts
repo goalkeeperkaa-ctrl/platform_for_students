@@ -30,6 +30,18 @@ const REQUIRED: Array<{ name: string; why: string; minLength?: number }> = [
     why: 'без него нечем подписывать сессии',
     minLength: 32,
   },
+  {
+    name: 'APP_URL',
+    why: 'без адреса платформы ссылки в письмах ведут на localhost',
+  },
+  {
+    name: 'SMTP_URL',
+    why: 'без почты не приходят коды подтверждения, ссылки сброса пароля и уведомления',
+  },
+  {
+    name: 'SMTP_FROM',
+    why: 'почтовый сервис не отправит письмо без адреса отправителя',
+  },
 ];
 
 export async function register(): Promise<void> {
@@ -53,7 +65,8 @@ export async function register(): Promise<void> {
     '\n[старт] запуск невозможен:\n' +
       problems.map((p) => `  · ${p}`).join('\n') +
       '\n\n  Ключи шифрования и подписи: npm run keys\n' +
-      '  Строка подключения к базе:   npm run db:connect\n',
+      '  Строка подключения к базе:   npm run db:connect\n' +
+      '  Почта (Yandex Cloud Postbox): ЗАПУСК.md, часть 7\n',
   );
 
   // Именно выход, а не throw: исключение из register() Next записывает в

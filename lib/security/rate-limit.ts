@@ -48,6 +48,13 @@ export const RATE_LIMITS = {
   upload: { limit: 20, windowSeconds: 600 },
   employerCode: { limit: 10, windowSeconds: 900 },
   sync: { limit: 6, windowSeconds: 3600 },
+  // Письмо с кодом: минутную паузу держит сама логика, лимит — от рассылки по кругу
+  emailCode: { limit: 6, windowSeconds: 900 },
+  // Ввод кода: пять ошибок гасят код, лимит — от перебора со свежими кодами
+  emailVerify: { limit: 30, windowSeconds: 900 },
+  // Сброс пароля: на адрес — с запасом на общий NAT, на почту — как у входа
+  passwordResetIp: { limit: 20, windowSeconds: 3600 },
+  passwordReset: { limit: 5, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;

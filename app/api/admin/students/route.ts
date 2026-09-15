@@ -2,6 +2,7 @@ import { fail, handle, ok } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
 import { listAdminStudents, releasePendingApplications } from '@/lib/services';
+import { notifyNewApplications, notifyStudyDecision } from '@/lib/notify';
 import { deleteStored } from '@/lib/storage';
 import { adminStudentUpdateSchema } from '@/lib/validation';
 
@@ -52,9 +53,10 @@ export async function PATCH(request: Request) {
       await store.students.rejectStudy(studentId, note ?? '');
       await deleteStored(student.studyDocUrl);
       await audit(session, { action: 'student.study.rejected', entity: 'Student', entityId: studentId }, request.headers);
+      await notifyStudyDecision(student, { approved: false, note: note ?? '' });
     }
 
-    let released = 0;
+    let released: string[] = [];
     const verify = studyDecision === 'APPROVE' ? true : studyVerified;
     if (verify !== undefined) {
       await store.students.setStudyVerified(studentId, verify);
@@ -71,13 +73,16 @@ export async function PATCH(request: Request) {
       );
       if (verify) {
         released = await releasePendingApplications(studentId);
-        if (released > 0) {
+        if (released.length > 0) {
           await audit(
             session,
-            { action: 'application.released', entity: 'Student', entityId: studentId, meta: { count: released } },
+            { action: 'application.released', entity: 'Student', entityId: studentId, meta: { count: released.length } },
             request.headers,
           );
         }
+        // Письмо — когда отметка появилась, а не при повторном нажатии
+        if (!student.studyVerified) await notifyStudyDecision(student, { approved: true, released: released.length });
+        await notifyNewApplications(released);
       }
     }
 
@@ -86,7 +91,7 @@ export async function PATCH(request: Request) {
       studentId,
       status: fresh?.status ?? student.status,
       studyVerified: fresh?.studyVerified ?? student.studyVerified,
-      released,
+      released: released.length,
     });
   });
 }

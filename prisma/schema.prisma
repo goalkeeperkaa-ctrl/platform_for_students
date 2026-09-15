@@ -142,14 +142,55 @@ model Account {
   marketingConsentAt DateTime?
   // Инструкцию по кабинету видел — сама больше не открывается
   tourSeenAt         DateTime?
+  // Почта подтверждена кодом из письма. Пока пусто, отклики студента ждут,
+  // а вакансии компании на проверку не уходят (lib/account-email.ts)
+  emailVerifiedAt    DateTime?
+  // Напоминания и сводки о сообщениях. Письма о решениях приходят всегда
+  notifyEmail        Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
-  student     Student?
-  employer    Employer?
-  accessCodes AccessCode[]
-  auditLogs   AuditLog[]
+  student       Student?
+  employer      Employer?
+  accessCodes   AccessCode[]
+  auditLogs     AuditLog[]
+  authTokens    AuthToken[]
+  notifications NotificationLog[]
 
   @@index([role])
+}
+
+enum AuthTokenKind {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+/// Код подтверждения почты или ссылка сброса пароля. Хранится только хеш:
+/// утечка таблицы не даёт ни войти, ни подтвердить чужую почту.
+model AuthToken {
+  id        String        @id @default(cuid())
+  accountId String
+  account   Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind      AuthTokenKind
+  tokenHash String
+  attempts  Int           @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([accountId, kind])
+  @@index([tokenHash])
+}
+
+/// Какие необязательные письма уже ушли: напоминание не приходит дважды,
+/// а сводка — один раз на каждое новое непрочитанное сообщение.
+model NotificationLog {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, key])
 }
 
 model Student {

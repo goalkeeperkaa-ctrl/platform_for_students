@@ -3,6 +3,7 @@ import { assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards'
 import { buildEmployerBoard } from '@/lib/services';
 import { applicationStatusSchema } from '@/lib/validation';
 import { NEXT_STEP_STATUSES, track } from '@/lib/analytics';
+import { notifyApplicationStatus } from '@/lib/notify';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export async function PATCH(request: Request) {
       { action: 'application.status', entity: 'Application', entityId: applicationId, meta: { status } },
       request.headers,
     );
+    if (application.status !== status) await notifyApplicationStatus(application, status);
 
     return ok({ application: updated });
   });

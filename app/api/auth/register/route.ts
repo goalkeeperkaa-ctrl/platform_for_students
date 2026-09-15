@@ -7,6 +7,7 @@ import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { HOME_BY_ROLE, SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
 import { registrationSchema } from '@/lib/validation';
 import { track } from '@/lib/analytics';
+import { sendEmailCode } from '@/lib/account-email';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import type { SessionUser } from '@/lib/types';
 
@@ -78,6 +79,9 @@ export async function POST(request: Request) {
       }, request.headers);
       await audit(session, { action: 'student.registered', entity: 'Student', entityId: student.id }, request.headers);
       await track('student.registered', { studentId: student.id });
+      // Код подтверждения — сразу. Сбой почты регистрацию не отменяет:
+      // код можно запросить заново из кабинета
+      await sendEmailCode(account.id).catch((error: unknown) => console.error('[почта] код не отправлен:', error));
       if (profileCompleteness(student).percent >= COMPLETE_PROFILE_PERCENT) {
         await track('student.profile.completed', { studentId: student.id });
       }

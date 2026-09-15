@@ -1,5 +1,7 @@
 'use client';
 
+import { NotificationToggle } from '@/components/account/NotificationToggle';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -619,6 +621,7 @@ export function ProfileEditor({
               требует подтверждения нового адреса. Напишите в агентство, если
               адрес нужно изменить.
             </p>
+            <NotificationToggle audience="student" />
             <div className="flex items-start gap-2.5 border-t border-[var(--hairline)] pt-4 text-paper-faint">
               <ShieldCheck className="mt-px size-4 shrink-0" aria-hidden />
               <span>

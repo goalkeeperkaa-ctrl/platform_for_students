@@ -1,5 +1,7 @@
 'use client';
 
+import { NotificationToggle } from '@/components/account/NotificationToggle';
+
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -350,6 +352,10 @@ export function CompanyEditor({
               />
             )}
           </div>
+        </Section>
+
+        <Section title="Уведомления">
+          <NotificationToggle audience="company" bordered={false} />
         </Section>
       </div>
 

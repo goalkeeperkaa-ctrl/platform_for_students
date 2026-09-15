@@ -4,6 +4,7 @@ import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
 import { buildModerationQueue } from '@/lib/services';
 import { moderationDecisionSchema, vacancyContentOf } from '@/lib/vacancy';
 import { track } from '@/lib/analytics';
+import { notifyCompanyDecision, notifyVacancyDecision } from '@/lib/notify';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
         request.headers,
       );
       if (approve) await track('company.approved', { employerId: id });
+      await notifyCompanyDecision(updated, approve, approve ? null : (note ?? null));
       return ok({ id, status: updated.moderationStatus });
     }
 
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
       { action: approve ? 'vacancy.approved' : 'vacancy.rejected', entity: 'Vacancy', entityId: id },
       request.headers,
     );
+    await notifyVacancyDecision(vacancy, approve, approve ? null : (note ?? null));
     return ok({ id, status: approve ? 'PUBLISHED' : 'REJECTED' });
   });
 }

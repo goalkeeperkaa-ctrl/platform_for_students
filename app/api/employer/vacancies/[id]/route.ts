@@ -1,5 +1,5 @@
 import { fail, handle, ok } from '@/lib/api';
-import { assertSameOrigin, audit, HttpError, requireEmployer } from '@/lib/security/guards';
+import { assertEmailVerified, assertSameOrigin, audit, HttpError, requireEmployer } from '@/lib/security/guards';
 import {
   SUBMITTABLE_STATUSES,
   statusAfterEdit,
@@ -40,6 +40,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const body: unknown = await request.json();
     const { submit } = vacancySaveSchema.parse(body);
     const input = vacancyInputSchema.parse(body);
+    if (submit) await assertEmailVerified(session.accountId);
 
     const status = statusAfterEdit(vacancy.status, submit);
     const updated = await store.vacancies.update(vacancy.id, {
@@ -80,6 +81,7 @@ export async function POST(request: Request, { params }: Params) {
     if (!SUBMITTABLE_STATUSES.includes(vacancy.status)) {
       return fail(409, 'Вакансия уже опубликована', 'ALREADY_PUBLISHED');
     }
+    await assertEmailVerified(session.accountId);
 
     const updated = await store.vacancies.update(vacancy.id, {
       status: 'PENDING',

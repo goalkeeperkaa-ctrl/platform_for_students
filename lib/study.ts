@@ -80,3 +80,14 @@ export function isPendingExpired(swipedAt: Date, now: Date = new Date()): boolea
 export function daysUntil(date: Date, now: Date = new Date()): number {
   return Math.max(0, Math.ceil((+date - +now) / DAY));
 }
+
+/**
+ * Отклики уходят работодателю, только когда подтверждены и учёба, и почта.
+ * До тех пор свайп вправо сохраняется и ждёт (releasePendingApplications).
+ */
+export function applicationsOpen(
+  student: { studyVerified: boolean },
+  account: { emailVerifiedAt: Date | null } | null,
+): boolean {
+  return student.studyVerified && Boolean(account?.emailVerifiedAt);
+}

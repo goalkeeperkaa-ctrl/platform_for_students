@@ -1,5 +1,5 @@
 import { fail, handle, ok } from '@/lib/api';
-import { assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
+import { assertEmailVerified, assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
 import { listEmployerVacancies } from '@/lib/services';
 import { VACANCY_LIMITS, vacancyInputSchema, vacancySaveSchema } from '@/lib/vacancy';
 
@@ -29,6 +29,8 @@ export async function POST(request: Request) {
     const body: unknown = await request.json();
     const { submit } = vacancySaveSchema.parse(body);
     const input = vacancyInputSchema.parse(body);
+    // На проверку — только с подтверждённой почтой; черновик можно и без неё
+    if (submit) await assertEmailVerified(session.accountId);
 
     const existing = await store.vacancies.listByEmployer(employer.id);
     if (existing.length >= VACANCY_LIMITS.perEmployer) {

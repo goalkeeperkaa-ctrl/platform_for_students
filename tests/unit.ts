@@ -14,8 +14,10 @@ import { companyRegistrationSchema, innSchema } from '../lib/company';
 import { isValidInn } from '../lib/inn';
 import { rankInstitutions } from '../lib/rating';
 import { fitHours, maxHoursPerWeek } from '../lib/schedule';
-import { addWorkdays, isPendingExpired, studyStatus, workdaysLeft } from '../lib/study';
-import { registrationSteps } from '../lib/validation';
+import { addWorkdays, applicationsOpen, isPendingExpired, studyStatus, workdaysLeft } from '../lib/study';
+import { isCodeShape, maskEmail, normalizeCode, resendWaitSeconds } from '../lib/account-codes';
+import { applicationStatusMail, emailCodeMail, escapeHtml, messagesDigestMail, passwordResetMail } from '../lib/mail/templates';
+import { emailCodeSchema, registrationSteps } from '../lib/validation';
 
 let passed = 0;
 const failures: string[] = [];
@@ -161,6 +163,52 @@ test('место — по доле, при равной доле выше тот
   assert.equal(place('x'), 2);
   assert.equal(place('y'), 3);
   assert.equal(place('w'), 3);
+});
+
+console.log('\nПочта');
+test('код из поля ввода: пробелы и дефисы отбрасываются', () => {
+  assert.equal(normalizeCode(' 12-34 56 '), '123456');
+  assert.equal(isCodeShape('123456'), true);
+  assert.equal(isCodeShape('12345'), false);
+  assert.equal(emailCodeSchema.parse({ code: '12 34 56' }).code, '123456');
+  assert.equal(emailCodeSchema.safeParse({ code: '12ab' }).success, false);
+});
+test('повторный код — не раньше чем через минуту', () => {
+  const sent = new Date('2026-09-15T10:00:00Z');
+  assert.equal(resendWaitSeconds(null), 0);
+  assert.equal(resendWaitSeconds(sent, new Date('2026-09-15T10:00:20Z')), 40);
+  assert.equal(resendWaitSeconds(sent, new Date('2026-09-15T10:01:00Z')), 0);
+});
+test('адрес в подсказке скрыт, домен виден', () => {
+  assert.equal(maskEmail('alice@mail.ru'), 'a***@mail.ru');
+  assert.equal(maskEmail('не адрес'), '***');
+});
+test('отклики уходят, только когда подтверждены и учёба, и почта', () => {
+  const at = new Date();
+  assert.equal(applicationsOpen({ studyVerified: true }, { emailVerifiedAt: at }), true);
+  assert.equal(applicationsOpen({ studyVerified: true }, { emailVerifiedAt: null }), false);
+  assert.equal(applicationsOpen({ studyVerified: false }, { emailVerifiedAt: at }), false);
+  assert.equal(applicationsOpen({ studyVerified: true }, null), false);
+});
+test('письмо с кодом: код в теме, тексте и HTML', () => {
+  const mail = emailCodeMail({ code: '042917', minutes: 30 });
+  assert.ok(mail.subject.includes('042917'));
+  assert.ok(mail.text.includes('Код: 042917'));
+  assert.ok(mail.html.includes('042917'));
+});
+test('HTML письма экранирует текст', () => {
+  assert.equal(escapeHtml('<b>"x"</b>'), '&lt;b&gt;&quot;x&quot;&lt;/b&gt;');
+  const mail = messagesDigestMail({ count: 2, title: '<script>alert(1)</script>', url: 'https://example.org/messages' });
+  assert.ok(!mail.html.includes('<script>'));
+});
+test('ссылка сброса есть и в тексте, и в кнопке', () => {
+  const mail = passwordResetMail({ url: 'https://students.example.org/reset/abc', minutes: 60 });
+  assert.ok(mail.text.includes('https://students.example.org/reset/abc'));
+  assert.ok(mail.html.includes('href="https://students.example.org/reset/abc"'));
+});
+test('на новый отклик письма студенту нет, на приглашение — есть', () => {
+  assert.equal(applicationStatusMail({ status: 'NEW', company: 'А', title: 'Б', url: 'https://x.org' }), null);
+  assert.ok(applicationStatusMail({ status: 'INVITED', company: 'А', title: 'Б', url: 'https://x.org' })?.subject.includes('приглашают'));
 });
 
 console.log(`\n${passed} проверок пройдено, ${failures.length} провалено`);

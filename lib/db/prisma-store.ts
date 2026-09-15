@@ -81,6 +81,15 @@ export function createPrismaStore(): DataStore {
       async markTourSeen(id) {
         await prisma.account.update({ where: { id }, data: { tourSeenAt: new Date() } });
       },
+      async markEmailVerified(id) {
+        await prisma.account.updateMany({ where: { id, emailVerifiedAt: null }, data: { emailVerifiedAt: new Date() } });
+      },
+      async setPassword(id, passwordHash) {
+        await prisma.account.update({ where: { id }, data: { passwordHash } });
+      },
+      async setNotifyEmail(id, enabled) {
+        await prisma.account.update({ where: { id }, data: { notifyEmail: enabled } });
+      },
     },
 
     students: {
@@ -503,6 +512,8 @@ export function createPrismaStore(): DataStore {
         });
         return count;
       },
+      listUnreadBefore: (before) =>
+        prisma.message.findMany({ where: { readAt: null, createdAt: { lt: before } }, orderBy: { createdAt: 'asc' } }),
       async unreadFor(applicationIds, reader) {
         const out: Record<string, number> = {};
         for (const id of applicationIds) out[id] = 0;
@@ -545,6 +556,41 @@ export function createPrismaStore(): DataStore {
         prisma.syncRun.update({ where: { id }, data: { ...patch, finishedAt: new Date() } }),
       latest: () => prisma.syncRun.findFirst({ orderBy: { startedAt: 'desc' } }),
       list: (limit) => prisma.syncRun.findMany({ orderBy: { startedAt: 'desc' }, take: limit }),
+    },
+
+    authTokens: {
+      async issue({ accountId, kind, tokenHash, expiresAt }) {
+        const [, record] = await prisma.$transaction([
+          prisma.authToken.deleteMany({ where: { accountId, kind, usedAt: null } }),
+          prisma.authToken.create({ data: { accountId, kind, tokenHash, expiresAt } }),
+        ]);
+        return record;
+      },
+      latest: (accountId, kind) =>
+        prisma.authToken.findFirst({ where: { accountId, kind, usedAt: null }, orderBy: { createdAt: 'desc' } }),
+      findActiveByHash: (kind, tokenHash) => prisma.authToken.findFirst({ where: { kind, tokenHash, usedAt: null } }),
+      async recordFailure(id) {
+        const row = await prisma.authToken.update({ where: { id }, data: { attempts: { increment: 1 } } });
+        return row.attempts;
+      },
+      async consume(id) {
+        // Условие usedAt: null в самом запросе: два одновременных ввода
+        // одного кода не должны оба пройти
+        const { count } = await prisma.authToken.updateMany({ where: { id, usedAt: null }, data: { usedAt: new Date() } });
+        return count === 1;
+      },
+    },
+
+    notifications: {
+      async claim(accountId, key) {
+        try {
+          await prisma.notificationLog.create({ data: { accountId, key } });
+          return true;
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return false;
+          throw err;
+        }
+      },
     },
 
     audit: {
@@ -603,6 +649,8 @@ async function upsertEmployer(item: CrmVacancyInput) {
           role: 'EMPLOYER',
           emailEnc: encrypt(item.contactEmail),
           emailHash: blindIndex(item.contactEmail),
+          // Клиента заводит агентство по договору — его почта уже проверена
+          emailVerifiedAt: new Date(),
         },
       },
     },

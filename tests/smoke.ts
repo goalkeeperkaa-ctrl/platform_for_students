@@ -85,6 +85,21 @@ class Session {
   }
 }
 
+/** Письма без почтового сервера — из журнала процесса (только в разработке). */
+async function mailbox(address: string): Promise<Array<{ subject: string; text: string }>> {
+  const response = await fetch(`${BASE}/api/dev/outbox?email=${encodeURIComponent(address)}`);
+  if (!response.ok) return [];
+  return ((await response.json()) as { messages: Array<{ subject: string; text: string }> }).messages;
+}
+
+async function lastMail(address: string, subjectPart: string) {
+  return (await mailbox(address)).filter((m) => m.subject.includes(subjectPart)).at(-1) ?? null;
+}
+
+function codeFrom(mail: { text: string } | null): string | null {
+  return mail?.text.match(/Код: (\d{6})/)?.[1] ?? null;
+}
+
 async function main() {
   console.log(`Сквозная проверка ${BASE}\n`);
 
@@ -129,6 +144,29 @@ async function main() {
   const hrLogin = await hr.post('/api/auth/login', { email: 'admin@fattakhov.ru', password: 'Admin12345!' });
   check('HR-менеджер входит', hrLogin.status === 200, hrLogin.body);
   const studentId = (await student.request('/api/auth/me')).body.session?.profileId as string;
+
+  // Почта: код приходит при регистрации; подтверждается ниже, после решения HR по справке
+  check('журнал писем разработки доступен', (await fetch(`${BASE}/api/dev/outbox`)).status === 400);
+  const meBefore = await student.request('/api/auth/me');
+  check('новая почта не подтверждена', meBefore.body?.account?.emailVerified === false, meBefore.body?.account);
+  const codeMail = await lastMail(email, 'Код подтверждения');
+  const emailCode = codeFrom(codeMail);
+  check('письмо с кодом пришло при регистрации', !!emailCode, codeMail?.subject);
+  const resendTooSoon = await student.post('/api/auth/email', {});
+  check(
+    'повторный код не раньше чем через минуту',
+    resendTooSoon.status === 429 && typeof resendTooSoon.body?.retryAfter === 'number',
+    resendTooSoon.body,
+  );
+  check('гость код не подтверждает', (await new Session().post('/api/auth/email/verify', { code: '123456' })).status === 401);
+  const badVerify = await student.post('/api/auth/email/verify', { code: emailCode === '000000' ? '111111' : '000000' });
+  check(
+    'неверный код отклонён с числом попыток',
+    badVerify.status === 400 && String(badVerify.body?.error).includes('Осталось попыток'),
+    badVerify.body,
+  );
+  const malformedCode = await student.post('/api/auth/email/verify', { code: '12ab' });
+  check('код не из шести цифр отклонён', malformedCode.status === 400 && !!malformedCode.body?.fields?.code, malformedCode.body);
 
   const weakPassword = await new Session().post('/api/auth/register', {
     fullName: 'Тест Тестов',
@@ -303,7 +341,15 @@ async function main() {
   });
   const approvedDoc = await hr.patch('/api/admin/students', { studentId, studyDecision: 'APPROVE' });
   check('HR подтверждает учёбу по справке', approvedDoc.status === 200 && approvedDoc.body?.studyVerified === true, approvedDoc.body);
-  check('ожидавший отклик ушёл работодателю', approvedDoc.body?.released === 1, approvedDoc.body);
+  check('без подтверждённой почты отклик всё ещё ждёт', approvedDoc.body?.released === 0, approvedDoc.body);
+  const rejectMail = await lastMail(email, 'Справку об обучении');
+  check('письмо о возвращённой справке пришло с причиной', !!rejectMail?.text.includes('Нечитаемый скан'), rejectMail?.subject);
+  check('письмо «учёба подтверждена» пришло', !!(await lastMail(email, 'Учёба подтверждена')));
+  const verified = await student.post('/api/auth/email/verify', { code: emailCode });
+  check('верный код подтверждает почту', verified.status === 200 && verified.body?.verified === true, verified.body);
+  check('ожидавший отклик ушёл работодателю после подтверждения почты', verified.body?.released === 1, verified.body);
+  check('почта подтверждена', (await student.request('/api/auth/me')).body?.account?.emailVerified === true);
+  check('повторный ввод кода не ломает подтверждение', (await student.post('/api/auth/email/verify', { code: emailCode })).status === 200);
   if (secondDoc.body.url) check('проверенная справка удалена с сервера', (await hr.request(secondDoc.body.url)).status === 404);
 
   const applications = await student.request('/api/applications');
@@ -831,6 +877,8 @@ async function main() {
   const companyReg = await company.post('/api/auth/register/company', companyData);
   check('компания регистрируется сама', companyReg.status === 201, companyReg.body);
   check('новая компания на модерации', companyReg.body?.moderationStatus === 'PENDING', companyReg.body);
+  const companyCode = codeFrom(await lastMail(companyEmail, 'Код подтверждения'));
+  check('компании пришёл код подтверждения почты', !!companyCode);
 
   const companyNoConsent = await new Session().post('/api/auth/register/company', {
     ...companyData,
@@ -985,6 +1033,14 @@ async function main() {
   );
   if (vacancyPhoto) check('фото черновика гостю не отдаётся', (await fetch(`${BASE}${vacancyPhoto}`)).status === 404);
 
+  const blockedSubmit = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'submit' });
+  check(
+    'без подтверждённой почты вакансия на проверку не уходит',
+    blockedSubmit.status === 403 && blockedSubmit.body?.code === 'EMAIL_NOT_VERIFIED',
+    blockedSubmit.body,
+  );
+  const companyVerified = await company.post('/api/auth/email/verify', { code: companyCode });
+  check('компания подтверждает почту', companyVerified.status === 200 && companyVerified.body?.verified === true, companyVerified.body);
   const submitted = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'submit' });
   check('вакансия уходит на проверку', submitted.status === 200 && submitted.body?.status === 'PENDING', submitted.body);
 
@@ -1036,6 +1092,8 @@ async function main() {
     note: 'Уточните обязанности стажёра',
   });
   check('вакансия отклоняется с причиной', rejected.status === 200 && rejected.body?.status === 'REJECTED', rejected.body);
+  const vacancyRejectMail = await lastMail(companyEmail, 'Вакансию вернули');
+  check('компании пришло письмо о возвращённой вакансии', !!vacancyRejectMail?.text.includes('Уточните обязанности стажёра'), vacancyRejectMail?.subject);
   const ownList = (await company.request('/api/employer/vacancies')).body?.vacancies ?? [];
   const listed = (ownList as Array<{ id: string; status: string; moderationNote: string | null }>).find((v) => v.id === vacancyId);
   check(
@@ -1058,6 +1116,8 @@ async function main() {
     note: 'Добавьте, чем занимается команда',
   });
   check('компанию можно отклонить с причиной', companyRejected.status === 200 && companyRejected.body?.status === 'REJECTED', companyRejected.body);
+  const companyRejectMail = await lastMail(companyEmail, 'Компанию вернули');
+  check('компании пришло письмо о доработке с причиной', !!companyRejectMail?.text.includes('Добавьте, чем занимается команда'), companyRejectMail?.subject);
   const companyResubmitted = await company.patch('/api/employer/company', companyPage);
   check(
     'отклонённая компания после правки снова на проверке',
@@ -1067,6 +1127,7 @@ async function main() {
 
   const companyApproved = await admin.post('/api/admin/moderation', { entity: 'company', id: companyId, decision: 'APPROVE' });
   check('компания одобряется', companyApproved.status === 200 && companyApproved.body?.status === 'APPROVED', companyApproved.body);
+  check('компании пришло письмо об одобрении', !!(await lastMail(companyEmail, 'Компания прошла проверку')));
   check('одобренная компания открыта гостю', (await new Session().request(`/companies/${companyId}`)).status === 200);
   const innLocked = await company.patch('/api/employer/company', { ...companyPage, inn: randomInn() });
   const lockedPage = String((await company.request('/employer/company')).body);
@@ -1077,6 +1138,7 @@ async function main() {
   );
   const vacancyApproved = await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
   check('вакансия одобряется', vacancyApproved.status === 200 && vacancyApproved.body?.status === 'PUBLISHED', vacancyApproved.body);
+  check('компании пришло письмо о публикации вакансии', !!(await lastMail(companyEmail, 'Вакансия опубликована')));
   check('одобренная вакансия в ленте', await inFeed());
   const twice = await admin.post('/api/admin/moderation', {
     entity: 'vacancy',
@@ -1110,6 +1172,7 @@ async function main() {
   // студенту, и никому не нужна помощь разработчика
   const finalSwipe = await student.post('/api/swipes', { vacancyId, direction: 'RIGHT' });
   check('финальный тест: студент откликается на вакансию новой компании', finalSwipe.status === 200 && finalSwipe.body?.applied === true, finalSwipe.body);
+  check('компании пришло письмо о новом отклике', !!(await lastMail(companyEmail, 'Новый отклик')));
   const companyBoard = ((await company.request('/api/employer/applications')).body?.applications ?? []) as Array<{
     id: string;
     vacancyId: string;
@@ -1120,6 +1183,7 @@ async function main() {
   if (finalApplication) {
     const invited = await company.patch('/api/employer/applications', { applicationId: finalApplication.id, status: 'INVITED' });
     check('финальный тест: компания приглашает студента', invited.status === 200, invited.body);
+    check('студенту пришло письмо о приглашении', !!(await lastMail(email, 'Вас приглашают')));
     const studentApps = ((await student.request('/api/applications')).body?.applications ?? []) as Array<{ id: string; status: string }>;
     check('финальный тест: студент видит приглашение', studentApps.some((a) => a.id === finalApplication.id && a.status === 'INVITED'));
     const hello = await company.post(`/api/messages/${finalApplication.id}`, { body: 'Здравствуйте! Приглашаем на знакомство в среду.' });
@@ -1225,6 +1289,46 @@ async function main() {
     pilot.body?.students,
   );
   check('страница метрик пилота открывается', (await admin.request('/admin/pilot')).status === 200);
+
+  // ---------- Напоминания и сводки ----------
+  console.log('\nНапоминания');
+  check('рассылку напоминаний запускает только HR', (await student.post('/api/admin/notifications', {})).status === 401);
+  const later = new Date(Date.now() + 30 * 60_000).toISOString();
+  const notifyRun = await admin.post('/api/admin/notifications', { at: later });
+  check('проход напоминаний выполняется', notifyRun.status === 200 && typeof notifyRun.body?.messageDigests === 'number', notifyRun.body);
+  check('студенту пришла сводка о непрочитанном сообщении', !!(await lastMail(email, 'Новое сообщение')));
+  const notifyAgain = await admin.post('/api/admin/notifications', { at: later });
+  check('повторный проход сводку не дублирует', notifyAgain.status === 200 && notifyAgain.body?.messageDigests === 0, notifyAgain.body);
+  const notifyOff = await student.patch('/api/account/notifications', { email: false });
+  check('напоминания отключаются', notifyOff.status === 200 && notifyOff.body?.email === false, notifyOff.body);
+  check('настройка напоминаний сохраняется', (await student.request('/api/account/notifications')).body?.email === false);
+  await student.patch('/api/account/notifications', { email: true });
+
+  // ---------- Восстановление пароля ----------
+  console.log('\nВосстановление пароля');
+  check('страница «забыли пароль» открывается', (await new Session().request('/forgot')).status === 200);
+  const forgotUnknown = await new Session().post('/api/auth/password/forgot', { email: `nobody-${Date.now()}@demo.ru` });
+  check('на незнакомую почту ответ тот же, что на свою', forgotUnknown.status === 200 && forgotUnknown.body?.sent === true, forgotUnknown.body);
+  const forgot = await new Session().post('/api/auth/password/forgot', { email });
+  check('запрос ссылки сброса принят', forgot.status === 200 && forgot.body?.sent === true, forgot.body);
+  const resetMail = await lastMail(email, 'Восстановление пароля');
+  const resetToken = resetMail?.text.match(/\/reset\/([A-Za-z0-9_-]{20,})/)?.[1];
+  check('письмо со ссылкой сброса пришло', !!resetToken, resetMail?.subject);
+  const badReset = await new Session().post('/api/auth/password/reset', { token: 'x'.repeat(43), password: 'Newpass12345!' });
+  check('чужая ссылка сброса не работает', badReset.status === 400, badReset.body);
+  if (resetToken) {
+    check('страница по ссылке открывается', (await new Session().request(`/reset/${resetToken}`)).status === 200);
+    const weakReset = await new Session().post('/api/auth/password/reset', { token: resetToken, password: '123' });
+    check('слабый пароль по ссылке не принимается', weakReset.status === 400 && !!weakReset.body?.fields?.password, weakReset.body);
+    const reset = await new Session().post('/api/auth/password/reset', { token: resetToken, password: 'Newpass12345!' });
+    check('пароль меняется по ссылке', reset.status === 200 && reset.body?.redirectTo === '/login?reset=1', reset.body);
+    check(
+      'ссылка сброса одноразовая',
+      (await new Session().post('/api/auth/password/reset', { token: resetToken, password: 'Other12345!' })).status === 400,
+    );
+    check('старый пароль больше не подходит', (await new Session().post('/api/auth/login', { email, password: 'Smoke12345!' })).status === 401);
+    check('новый пароль подходит', (await new Session().post('/api/auth/login', { email, password: 'Newpass12345!' })).status === 200);
+  }
 
   // ---------- Перебор пароля ----------
   // Порог висит на учётной записи, а не только на адресе: за одним IP

@@ -35,6 +35,10 @@ export interface AccountRecord {
   termsAcceptedAt: Date | null;
   marketingConsentAt: Date | null;
   tourSeenAt: Date | null;
+  /** Почта подтверждена кодом из письма или переходом по ссылке сброса пароля */
+  emailVerifiedAt: Date | null;
+  /** Напоминания и сводки о сообщениях; письма о решениях приходят всегда */
+  notifyEmail: boolean;
   createdAt: Date;
 }
 
@@ -174,6 +178,20 @@ export interface ApplicationRecord {
   createdAt: Date;
   /** Денормализовано ради сортировки списка диалогов одним запросом */
   lastMessageAt: Date | null;
+}
+
+export type AuthTokenKind = 'EMAIL_VERIFY' | 'PASSWORD_RESET';
+
+/** Код подтверждения почты или ссылка сброса пароля. Только хеш, сам код не хранится. */
+export interface AuthTokenRecord {
+  id: string;
+  accountId: string;
+  kind: AuthTokenKind;
+  tokenHash: string;
+  attempts: number;
+  expiresAt: Date;
+  usedAt: Date | null;
+  createdAt: Date;
 }
 
 export interface MessageRecord {
@@ -431,6 +449,27 @@ export interface DataStore {
     touchLogin(id: string): Promise<void>;
     /** Инструкция по кабинету пройдена или закрыта */
     markTourSeen(id: string): Promise<void>;
+    /** Повторная отметка не сдвигает дату первого подтверждения */
+    markEmailVerified(id: string): Promise<void>;
+    setPassword(id: string, passwordHash: string): Promise<void>;
+    setNotifyEmail(id: string, enabled: boolean): Promise<void>;
+  };
+
+  authTokens: {
+    /** Новый код отменяет прежние неиспользованные того же вида: действует последнее письмо */
+    issue(input: { accountId: string; kind: AuthTokenKind; tokenHash: string; expiresAt: Date }): Promise<AuthTokenRecord>;
+    /** Последний неиспользованный — для проверки кода и паузы между письмами */
+    latest(accountId: string, kind: AuthTokenKind): Promise<AuthTokenRecord | null>;
+    findActiveByHash(kind: AuthTokenKind, tokenHash: string): Promise<AuthTokenRecord | null>;
+    /** Неверный ввод; возвращает, сколько ошибок уже накопилось */
+    recordFailure(id: string): Promise<number>;
+    /** Погасить. false — его уже погасил параллельный запрос */
+    consume(id: string): Promise<boolean>;
+  };
+
+  notifications: {
+    /** Отметить письмо отправленным. false — такое уже уходило, второй раз не шлём */
+    claim(accountId: string, key: string): Promise<boolean>;
   };
 
   students: {
@@ -526,6 +565,8 @@ export interface DataStore {
     /** Непрочитанное для читателя по каждому отклику — одним запросом на список */
     unreadFor(applicationIds: string[], reader: MessageAuthor): Promise<Record<string, number>>;
     lastFor(applicationIds: string[]): Promise<Record<string, MessageRecord>>;
+    /** Непрочитанные, написанные раньше момента, — для сводки на почту */
+    listUnreadBefore(before: Date): Promise<MessageRecord[]>;
   };
 
   accessCodes: {

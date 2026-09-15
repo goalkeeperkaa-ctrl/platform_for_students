@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCodeShape, normalizeCode } from '@/lib/account-codes';
 import { MAX_AGE, MIN_AGE, fullYears, parseIsoDate, todayInMoscow } from '@/lib/age';
 import { lookingForSchema, portfolioSchema } from '@/lib/portfolio';
 import { MAX_HOURS_PER_WEEK, MIN_HOURS_PER_WEEK, maxHoursPerWeek } from '@/lib/schedule';
@@ -204,6 +205,20 @@ export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Введите пароль'),
 });
+
+/** Код из письма: пробелы и дефисы, которые люди ставят сами, не мешают. */
+export const emailCodeSchema = z.object({
+  code: z.string().transform(normalizeCode).refine(isCodeShape, 'Код — шесть цифр из письма'),
+});
+
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20, 'Ссылка неполная — откройте её из письма целиком').max(200, 'Ссылка неполная'),
+  password: passwordSchema,
+});
+
+export const notificationSettingsSchema = z.object({ email: z.boolean() });
 
 export const employerCodeSchema = z.object({
   code: z

@@ -94,6 +94,11 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         {/* Пришли с /logout?reason=stale: сессия ссылалась на аккаунт,
             которого больше нет. Без пояснения человек видит форму входа
             без причины и решает, что его выкинуло просто так. */}
+        {params.get('reset') === '1' && (
+          <div className="mb-4 rounded-2xl border border-yes/30 bg-yes/[0.08] p-4 text-[13px] leading-relaxed text-paper">
+            Пароль изменён — войдите с новым.
+          </div>
+        )}
         {params.get('reason') === 'stale' && (
           <div className="mb-4 rounded-2xl border border-warn/35 bg-warn/[0.08] p-4 text-[13px] leading-relaxed text-warn">
             Сессия устарела — данные аккаунта изменились на сервере. Войдите заново.
@@ -139,6 +144,14 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
+                    <div className="flex justify-end">
+                      <Link
+                        href="/forgot"
+                        className="text-[12.5px] text-paper-faint underline-offset-4 transition-colors hover:text-paper hover:underline"
+                      >
+                        Забыли пароль?
+                      </Link>
+                    </div>
                   </>
                 ) : (
                   <TextField

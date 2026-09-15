@@ -52,6 +52,7 @@ async function main() {
               role: 'EMPLOYER',
               emailEnc: encrypt(item.contactEmail),
               emailHash: blindIndex(item.contactEmail),
+              emailVerifiedAt: new Date(),
             },
           },
         },
@@ -326,8 +327,8 @@ async function upsertAccountWithPassword(
   const passwordHash = await hashPassword(password);
   return prisma.account.upsert({
     where: { emailHash },
-    update: { passwordHash, isActive: true },
-    create: { role, emailEnc: encrypt(email), emailHash, passwordHash },
+    update: { passwordHash, isActive: true, emailVerifiedAt: new Date() },
+    create: { role, emailEnc: encrypt(email), emailHash, passwordHash, emailVerifiedAt: new Date() },
   });
 }
 

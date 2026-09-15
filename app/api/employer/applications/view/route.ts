@@ -2,6 +2,7 @@ import { fail, handle, ok } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import { assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
 import { applicationViewSchema } from '@/lib/validation';
+import { notifyApplicationStatus } from '@/lib/notify';
 
 export const runtime = 'nodejs';
 
@@ -45,6 +46,8 @@ export async function POST(request: Request) {
       vacancyId: vacancy.id,
       applicationId,
     });
+
+    await notifyApplicationStatus(application, 'VIEWED');
 
     return ok({ id: applicationId, status: updated?.status ?? 'VIEWED' });
   });
