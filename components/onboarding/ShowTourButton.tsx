@@ -17,10 +17,12 @@ export function ShowTourButton() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/tour', { cache: 'no-store' })
-      .then((response) => (response.ok ? (response.json() as Promise<{ role: Role }>) : null))
+    // /api/auth/me отвечает гостю пустой сессией, а не 401: страница помощи
+    // открыта без входа, и ошибка в консоли на ней была бы ложной тревогой
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((response) => (response.ok ? (response.json() as Promise<{ session: { role: Role } | null }>) : null))
       .then((data) => {
-        if (!cancelled && data) setRole(data.role);
+        if (!cancelled && data?.session) setRole(data.session.role);
       })
       .catch(() => null);
     return () => {
