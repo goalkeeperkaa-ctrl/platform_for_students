@@ -1330,7 +1330,13 @@ async function main() {
     check('метрики пилота без доступа закрыты', (await staff.request('/api/admin/pilot')).status === 403);
     const staffStats = await staff.request('/api/admin/stats');
     check('панель открыта, журнал без доступа к пилоту скрыт', staffStats.status === 200 && (staffStats.body?.audit ?? []).length === 0, staffStats.status);
-    check('страница невыданного раздела уводит на панель', [303, 307].includes((await staff.request('/admin/moderation')).status));
+    // Кабинет стримится, поэтому redirect() приходит страницей с NEXT_REDIRECT и кодом 200
+    const deniedPage = await staff.request('/admin/moderation');
+    check(
+      'страница невыданного раздела уводит на панель',
+      [303, 307].includes(deniedPage.status) || String(deniedPage.body).includes('NEXT_REDIRECT'),
+      deniedPage.status,
+    );
     const replay = await enterFromCrm(firstTicket);
     check('по тому же билету второй раз не войти', replay.location.includes('crm=used'), replay.location);
     const past = Math.floor(Date.now() / 1000) - 120;
