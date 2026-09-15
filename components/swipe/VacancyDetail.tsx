@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { MatchRing } from './MatchRing';
 import { durations, easeOutExpo, springSoft } from '@/lib/motion';
 import { companyGradient, formatSalary } from '@/lib/utils';
+import { mapUrl } from '@/lib/vacancy';
 import {
   EMPLOYMENT_TYPE_LABEL,
   WEEKDAY_LABEL,
@@ -166,6 +167,28 @@ export function VacancyDetail({
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {vacancy.address && (
+                <div className="mt-6 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-[var(--hairline)] bg-graphite-900/45 p-4">
+                  <p className="flex min-w-0 items-start gap-2 text-[14px] leading-snug text-paper">
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-accent-300" aria-hidden />
+                    <span className="min-w-0 break-words">
+                      {vacancy.city}, {vacancy.address}
+                      {vacancy.addressDetails && (
+                        <span className="block text-[12.5px] text-paper-faint">{vacancy.addressDetails}</span>
+                      )}
+                    </span>
+                  </p>
+                  <a
+                    href={mapUrl(vacancy.city, vacancy.address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-[13px] text-accent-200 underline-offset-4 transition-colors hover:text-paper hover:underline"
+                  >
+                    Открыть на карте
+                  </a>
                 </div>
               )}
 

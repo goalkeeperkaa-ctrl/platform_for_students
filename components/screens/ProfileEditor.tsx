@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Plus, ShieldCheck, Trash2, TriangleAlert, X } from 'lucide-react';
@@ -9,9 +10,12 @@ import { Chip } from '@/components/ui/Chip';
 import { SelectField, TextAreaField, TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
+import { BirthDateField } from '@/components/forms/BirthDateField';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
+import { ScheduleFields } from '@/components/forms/ScheduleFields';
 import { SkillsInput } from '@/components/forms/SkillsInput';
 import { UniversityInput } from '@/components/forms/UniversityInput';
+import { StudyDocumentCard } from '@/components/student/StudyDocumentCard';
 import { StudyVerificationNote } from '@/components/student/StudyVerificationNote';
 import { durations, easeOutExpo } from '@/lib/motion';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
@@ -31,11 +35,10 @@ import {
   type LinkItem,
   type LookingFor,
   type ProjectItem,
+  type StudyStateDTO,
   type Weekday,
 } from '@/lib/types';
 
-const CURRENT_YEAR = new Date().getFullYear();
-const HOURS_OPTIONS = [8, 12, 16, 20, 24, 30, 40];
 
 /** Те же пределы, что в lib/portfolio.ts: кнопка «Добавить» гаснет раньше, чем сервер откажет. */
 const LIMITS = { projects: 10, achievements: 15, activities: 10, links: 10 } as const;
@@ -50,7 +53,7 @@ export interface ProfileFormState {
   fullName: string;
   phone: string;
   gender: Gender;
-  birthYear: number;
+  birthDate: string;
   photoUrl: string | null;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -103,12 +106,14 @@ export function ProfileEditor({
   consent,
   institutions,
   studyVerified,
+  study,
 }: {
   initial: ProfileFormState;
   email: string;
   consent: { version: string; at: string };
   institutions: InstitutionOption[];
   studyVerified: boolean;
+  study: StudyStateDTO;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -269,18 +274,10 @@ export function ProfileEditor({
               </div>
             </fieldset>
 
-            <SelectField
-              label="Год рождения"
-              value={String(form.birthYear)}
-              error={errors.birthYear}
-              onChange={(e) => patch({ birthYear: Number(e.target.value) })}
-              // Год того, кто зарегистрировался раньше по правилу 14+, в списке
-              // остаётся: иначе поле показывало бы не его год
-              options={Array.from(
-                new Set([...Array.from({ length: 27 }, (_, i) => CURRENT_YEAR - 18 - i), initial.birthYear]),
-              )
-                .sort((a, b) => b - a)
-                .map((year) => ({ value: String(year), label: String(year) }))}
+            <BirthDateField
+              value={form.birthDate}
+              error={errors.birthDate}
+              onChange={(birthDate) => patch({ birthDate })}
             />
 
             <TextField
@@ -317,6 +314,7 @@ export function ProfileEditor({
               changed={form.university !== saved.university || form.institutionId !== saved.institutionId}
               institutionSlug={institutions.find((i) => i.id === form.institutionId)?.slug ?? null}
             />
+            {!studyVerified && <StudyDocumentCard state={study} />}
             <TextField
               label="Специальность"
               value={form.speciality}
@@ -347,6 +345,15 @@ export function ProfileEditor({
               onChange={(e) => patch({ city: e.target.value })}
             />
           </div>
+        </Section>
+
+        <Section title="Когда можете работать">
+          <ScheduleFields
+            workDays={form.workDays}
+            hoursPerWeek={form.hoursPerWeek}
+            errors={errors}
+            onChange={(next) => patch(next)}
+          />
         </Section>
 
         <Section title="Что ищете и зачем">
@@ -619,6 +626,17 @@ export function ProfileEditor({
                 дано {consent.at}.
               </span>
             </div>
+            <p className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]">
+              <Link href="/legal/consent" className="text-paper/80 underline underline-offset-4 hover:text-paper">
+                Текст согласия
+              </Link>
+              <Link href="/legal/terms" className="text-paper/80 underline underline-offset-4 hover:text-paper">
+                Пользовательское соглашение
+              </Link>
+              <Link href="/legal/privacy" className="text-paper/80 underline underline-offset-4 hover:text-paper">
+                Политика обработки данных
+              </Link>
+            </p>
           </div>
         </Section>
 

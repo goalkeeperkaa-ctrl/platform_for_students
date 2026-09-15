@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ProfileEditor } from '@/components/screens/ProfileEditor';
 import { requireStudentPage } from '@/lib/security/guards';
 import { decryptSafe } from '@/lib/security/crypto';
-import { listInstitutionOptions } from '@/lib/services';
+import { buildStudyState, listInstitutionOptions } from '@/lib/services';
 
 export const metadata: Metadata = { title: 'Профиль' };
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,7 @@ export default async function ProfilePage() {
       email={decryptSafe(account?.emailEnc, '')}
       institutions={institutions}
       studyVerified={student.studyVerified}
+      study={buildStudyState(student)}
       consent={{
         version: student.consentVersion,
         at: student.consentAt.toLocaleDateString('ru-RU', {
@@ -32,7 +33,7 @@ export default async function ProfilePage() {
         fullName: decryptSafe(student.fullNameEnc, ''),
         phone: decryptSafe(student.phoneEnc, ''),
         gender: student.gender,
-        birthYear: student.birthYear,
+        birthDate: decryptSafe(student.birthDateEnc, ''),
         photoUrl: student.photoUrl,
         resumeUrl: student.resumeUrl,
         resumeName: student.resumeName,

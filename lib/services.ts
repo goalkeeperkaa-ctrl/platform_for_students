@@ -2,10 +2,13 @@ import 'server-only';
 import { getStore } from '@/lib/db';
 import { scoreMatch, studentName, toStudentDTO, toVacancyDTO } from '@/lib/db/mappers';
 import { decryptSafe } from '@/lib/security/crypto';
-import type { EmployerRecord, InstitutionRecord, StudentRecord, VacancyRecord } from '@/lib/db/types';
-import { isVacancyVisible, studentFacingVacancy } from '@/lib/vacancy';
-import { NEXT_STEP_STATUSES } from '@/lib/analytics';
+import type { EmployerRecord, InstitutionRecord, StudentRecord, SwipeRecord, VacancyRecord } from '@/lib/db/types';
+import { isVacancyVisible, studentFacingVacancy, type CompanyAddress } from '@/lib/vacancy';
+import { NEXT_STEP_STATUSES, track } from '@/lib/analytics';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
+import { isFreeEmail } from '@/lib/company';
+import { PILOT_CITY } from '@/lib/pilot';
+import { isPendingExpired, pendingExpiresAt, studyDocDeadline, studyStatus, workdaysLeft } from '@/lib/study';
 import {
   APPLICATION_STATUSES,
   EVENT_LABEL,
@@ -27,6 +30,8 @@ import {
   type StudentStatus,
   type SyncRunDTO,
   type VacancyDTO,
+  type PendingApplicationDTO,
+  type StudyStateDTO,
 } from '@/lib/types';
 
 /**
@@ -54,6 +59,9 @@ async function employerIndex(): Promise<Map<string, EmployerRecord>> {
 import type { CompanyPublicDTO } from '@/lib/types';
 
 export async function buildFeed(studentId: string, limit = 30): Promise<VacancyDTO[]> {
+  // Просроченные ожидающие отклики удаляются до сборки ленты: вакансия
+  // возвращается студенту, а не пропадает вместе с неотправленным откликом
+  await expirePendingSwipes(studentId);
   const store = await getStore();
   const [student, vacancies, swipedIds, employers] = await Promise.all([
     store.students.findById(studentId),
@@ -374,7 +382,10 @@ export async function getStudentProfile(studentId: string) {
   const student = await store.students.findById(studentId);
   if (!student) return null;
   const account = await store.accounts.findById(student.accountId);
-  return toStudentDTO(student, account ? decryptSafe(account.emailEnc) : '');
+  return toStudentDTO(student, account ? decryptSafe(account.emailEnc) : '', {
+    includeContacts: true,
+    includeBirthDate: true,
+  });
 }
 
 /**
@@ -473,6 +484,9 @@ export async function buildModerationQueue(): Promise<ModerationQueue> {
       companyName: employer.companyName,
       contactName: employer.contactName,
       email: account ? decryptSafe(account.emailEnc) : '',
+      inn: employer.inn,
+      phone: decryptSafe(employer.phoneEnc, '') || null,
+      freeEmail: isFreeEmail(account ? decryptSafe(account.emailEnc) : ''),
       logoUrl: employer.logoUrl,
       industry: employer.industry,
       city: employer.city,
@@ -525,7 +539,10 @@ function toInstitutionPublic(item: InstitutionRecord): InstitutionPublicDTO {
 /** Справочник вузов для подсказок при вводе. */
 export async function listInstitutionOptions(): Promise<InstitutionOption[]> {
   const store = await getStore();
-  return (await store.institutions.list()).map(({ id, slug, name, shortName, city }) => ({
+  // Пилот идёт в одном городе: вузы других городов в подсказках только путали бы
+  return (await store.institutions.list())
+    .filter((item) => item.city === PILOT_CITY)
+    .map(({ id, slug, name, shortName, city }) => ({
     id,
     slug,
     name,
@@ -536,13 +553,13 @@ export async function listInstitutionOptions(): Promise<InstitutionOption[]> {
 
 export async function listInstitutionsPublic(): Promise<InstitutionPublicDTO[]> {
   const store = await getStore();
-  return (await store.institutions.list()).map(toInstitutionPublic);
+  return (await store.institutions.list()).filter((item) => item.city === PILOT_CITY).map(toInstitutionPublic);
 }
 
 export async function getInstitutionPublic(slug: string): Promise<InstitutionPublicDTO | null> {
   const store = await getStore();
   const item = await store.institutions.findBySlug(slug);
-  return item ? toInstitutionPublic(item) : null;
+  return item && item.city === PILOT_CITY ? toInstitutionPublic(item) : null;
 }
 
 function median(values: number[]): number | null {
@@ -681,7 +698,150 @@ export async function listAdminStudents(): Promise<AdminStudentDTO[]> {
     city: s.city,
     status: s.status,
     studyVerified: s.studyVerified,
+    study: studyStatus(s),
+    studyDocUrl: s.studyDocUrl,
+    studyDocName: s.studyDocName,
+    studyDocAt: s.studyDocAt?.toISOString() ?? null,
+    studyReviewNote: s.studyReviewNote,
     applications: counts.get(s.id) ?? 0,
     createdAt: s.createdAt.toISOString(),
   }));
+}
+
+/**
+ * Свайпы вправо, которые ждут подтверждения учёбы, — у студента без
+ * отметки и без отклика на эту вакансию. Просроченные удаляются здесь же:
+ * через две недели отклик уже никому не нужен, а вакансия возвращается в ленту.
+ */
+async function expirePendingSwipes(studentId: string): Promise<{ student: StudentRecord | null; waiting: SwipeRecord[] }> {
+  const store = await getStore();
+  const [student, rights, applications] = await Promise.all([
+    store.students.findById(studentId),
+    store.swipes.listByStudent(studentId, 'RIGHT'),
+    store.applications.listByStudent(studentId),
+  ]);
+  if (!student || student.studyVerified) return { student, waiting: [] };
+  const applied = new Set(applications.map((a) => a.vacancyId));
+  const now = new Date();
+  const waiting: SwipeRecord[] = [];
+  for (const swipe of rights) {
+    if (applied.has(swipe.vacancyId)) continue;
+    if (isPendingExpired(swipe.createdAt, now)) await store.swipes.remove(studentId, swipe.vacancyId);
+    else waiting.push(swipe);
+  }
+  return { student, waiting };
+}
+
+/** Сколько откликов ждёт подтверждения учёбы — для счётчика во вкладке. */
+export async function countWaitingApplications(studentId: string): Promise<number> {
+  return (await expirePendingSwipes(studentId)).waiting.length;
+}
+
+/** Ожидающие отклики с карточкой вакансии и сроком, когда удалятся. */
+export async function listPendingApplications(studentId: string): Promise<PendingApplicationDTO[]> {
+  const { student, waiting } = await expirePendingSwipes(studentId);
+  if (!student || waiting.length === 0) return [];
+  const store = await getStore();
+  const [vacancies, employers] = await Promise.all([
+    store.vacancies.findManyByIds(waiting.map((s) => s.vacancyId)),
+    employerIndex(),
+  ]);
+  const byId = new Map(vacancies.map((v) => [v.id, v]));
+  return waiting.flatMap((swipe) => {
+    const vacancy = byId.get(swipe.vacancyId);
+    if (!vacancy) return [];
+    const employer = employers.get(vacancy.employerId) ?? null;
+    const shown = studentFacingVacancy(vacancy, employer);
+    return [
+      {
+        vacancy: toVacancyDTO(shown, employer, scoreMatch(student, shown)),
+        swipedAt: swipe.createdAt.toISOString(),
+        expiresAt: pendingExpiresAt(swipe.createdAt).toISOString(),
+      },
+    ];
+  });
+}
+
+/**
+ * Учёба подтверждена — ожидавшие отклики уходят работодателям.
+ *
+ * Вакансия, которую за это время сняли или вернули на проверку, пропускается,
+ * и свайп по ней удаляется: откликнуться на неё сейчас нельзя, а в ленту она
+ * вернётся, когда её снова опубликуют. Возвращает, сколько откликов ушло.
+ */
+export async function releasePendingApplications(studentId: string): Promise<number> {
+  const store = await getStore();
+  const [student, rights, applications, employers] = await Promise.all([
+    store.students.findById(studentId),
+    store.swipes.listByStudent(studentId, 'RIGHT'),
+    store.applications.listByStudent(studentId),
+    employerIndex(),
+  ]);
+  if (!student) return 0;
+  const applied = new Set(applications.map((a) => a.vacancyId));
+  const waiting = rights.filter((s) => !applied.has(s.vacancyId));
+  if (waiting.length === 0) return 0;
+
+  const vacancies = await store.vacancies.findManyByIds(waiting.map((s) => s.vacancyId));
+  const byId = new Map(vacancies.map((v) => [v.id, v]));
+  const now = new Date();
+  let released = 0;
+  for (const swipe of waiting) {
+    const vacancy = byId.get(swipe.vacancyId);
+    if (!vacancy || isPendingExpired(swipe.createdAt, now) || !isVacancyVisible(vacancy, employers.get(vacancy.employerId))) {
+      await store.swipes.remove(studentId, swipe.vacancyId);
+      continue;
+    }
+    const application = await store.applications.upsert({ studentId, vacancyId: vacancy.id });
+    await track('application.created', {
+      studentId,
+      employerId: vacancy.employerId,
+      vacancyId: vacancy.id,
+      applicationId: application.id,
+    });
+    released++;
+  }
+  if (released > 0 && student.status === 'ACTIVE') await store.students.setStatus(studentId, 'IN_PROGRESS');
+  return released;
+}
+
+/** Статус учёбы и сроки справки — одинаково для профиля, ленты и откликов. */
+export function buildStudyState(student: StudentRecord): StudyStateDTO {
+  const deadline = studyDocDeadline(student.createdAt);
+  const now = new Date();
+  return {
+    status: studyStatus(student),
+    docName: student.studyDocName,
+    docAt: student.studyDocAt?.toISOString() ?? null,
+    note: student.studyReviewNote,
+    deadline: deadline.toISOString(),
+    workdaysLeft: workdaysLeft(deadline, now),
+    deadlinePassed: +now >= +deadline,
+  };
+}
+
+/** Сколько справок ждёт решения HR — для счётчика на вкладке «Студенты». */
+export async function countPendingStudyDocs(): Promise<number> {
+  const store = await getStore();
+  return (await store.students.list()).filter((s) => !s.studyVerified && s.studyDocUrl).length;
+}
+
+/** Адреса вакансий компании без повторов — подсказка для новой вакансии. */
+export async function listEmployerAddresses(employerId: string): Promise<CompanyAddress[]> {
+  const store = await getStore();
+  const seen = new Set<string>();
+  const addresses: CompanyAddress[] = [];
+  for (const vacancy of await store.vacancies.listByEmployer(employerId)) {
+    if (!vacancy.address) continue;
+    const key = [vacancy.city, vacancy.address, vacancy.addressDetails ?? ''].join('|').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    addresses.push({
+      city: vacancy.city,
+      district: vacancy.district,
+      address: vacancy.address,
+      addressDetails: vacancy.addressDetails,
+    });
+  }
+  return addresses;
 }

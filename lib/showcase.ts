@@ -31,6 +31,8 @@ export function showcaseVacancies(count = 5): VacancyDTO[] {
       salaryPeriod: item.salaryPeriod,
       city: item.city,
       district: item.district,
+      address: null,
+      addressDetails: null,
       workFormat: item.workFormat,
       employmentType: item.employmentType,
       shiftDays: item.shiftDays,

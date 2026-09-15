@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { CompanyEditor } from '@/components/screens/CompanyEditor';
 import { countUnread } from '@/lib/chat';
 import { employerNav } from '@/lib/employer-nav';
+import { decryptSafe } from '@/lib/security/crypto';
 import { requireEmployerPage } from '@/lib/security/guards';
 import { buildEmployerBoard } from '@/lib/services';
 
@@ -28,6 +29,8 @@ export default async function EmployerCompanyPage() {
         initial={{
           companyName: employer.companyName,
           contactName: employer.contactName,
+          phone: decryptSafe(employer.phoneEnc, ''),
+          inn: employer.inn ?? '',
           logoUrl: employer.logoUrl,
           industry: employer.industry ?? '',
           about: employer.about ?? '',

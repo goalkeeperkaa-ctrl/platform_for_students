@@ -134,6 +134,12 @@ model Account {
 
   isActive    Boolean   @default(true)
   lastLoginAt DateTime?
+
+  // Пользовательское соглашение и рассылка — отдельно от согласия на ПДн,
+  // которое лежит в анкете студента и у компании: это разные документы.
+  termsVersion       String?
+  termsAcceptedAt    DateTime?
+  marketingConsentAt DateTime?
   createdAt   DateTime  @default(now())
 
   student     Student?
@@ -155,6 +161,11 @@ model Student {
   gender    Gender @default(UNSPECIFIED)
   birthYear Int
 
+  // Полная дата рождения — зашифрованной, как ФИО: вместе с именем она
+  // указывает на человека. Год рядом открыт — для подбора и статистики.
+  // Пусто только у анкет, заведённых до полной даты.
+  birthDateEnc String?
+
   photoUrl   String?
   resumeUrl  String?
   resumeName String?
@@ -172,6 +183,13 @@ model Student {
   // когда студент меняет вуз: подтверждали другой.
   studyVerified   Boolean   @default(false)
   studyVerifiedAt DateTime?
+
+  // Справка об обучении, которая ждёт проверки HR. После решения файл
+  // удаляется — остаются отметка и, при отказе, причина для студента.
+  studyDocUrl     String?
+  studyDocName    String?
+  studyDocAt      DateTime?
+  studyReviewNote String?
 
   city         String?
   workDays     Weekday[] @default([])
@@ -217,6 +235,14 @@ model Employer {
 
   companyName String
   contactName String
+  // Телефон контактного лица: HR-менеджер звонит, чтобы подтвердить
+  // компанию. ПДн — зашифрован, студентам не показывается.
+  phoneEnc String?
+
+  // ИНН: 10 цифр у организации, 12 у ИП. По нему HR сверяет компанию с
+  // госреестром. Уникален — вторая регистрация той же компании видна сразу.
+  // Пуст у клиентов из CRM: реквизиты там.
+  inn String? @unique
   logoUrl     String?
 
   // Страница компании. Заполняет сама компания после регистрации;
@@ -297,6 +323,11 @@ model Vacancy {
 
   city     String
   district String?
+
+  // Точный адрес места работы: студенту важно, сколько ехать. У удалённой
+  // вакансии пуст. Офис, этаж, вход — отдельно, чтобы карта искала сам адрес.
+  address        String?
+  addressDetails String?
 
   workFormat     WorkFormat     @default(ONSITE)
   employmentType EmploymentType @default(PART_TIME)

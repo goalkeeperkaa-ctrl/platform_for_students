@@ -1,5 +1,8 @@
 import { z } from 'zod';
+import { MAX_AGE, MIN_AGE, fullYears, parseIsoDate, todayInMoscow } from '@/lib/age';
 import { lookingForSchema, portfolioSchema } from '@/lib/portfolio';
+import { MAX_HOURS_PER_WEEK, MIN_HOURS_PER_WEEK, maxHoursPerWeek } from '@/lib/schedule';
+import { STUDY_FILE_PATTERN } from '@/lib/study';
 import {
   APPLICATION_STATUSES,
   GENDERS,
@@ -17,8 +20,6 @@ import {
  * которые он молча отвергает без объяснений.
  */
 
-const CURRENT_YEAR = new Date().getFullYear();
-
 export const emailSchema = z
   .string()
   .trim()
@@ -34,13 +35,22 @@ export const passwordSchema = z
   .regex(/[a-zа-яё]/i, 'Добавьте хотя бы одну букву')
   .regex(/\d/, 'Добавьте хотя бы одну цифру');
 
+const PHONE_PATTERN = /^\+?[\d\s()-]{10,20}$/;
+
 export const phoneSchema = z
   .string()
   .trim()
-  .regex(/^\+?[\d\s()-]{10,20}$/, 'Формат: +7 900 000-00-00')
+  .regex(PHONE_PATTERN, 'Формат: +7 900 000-00-00')
   .optional()
   .or(z.literal(''))
   .transform((v) => (v ? v : null));
+
+/** Телефон, без которого нельзя: у компании по нему звонит HR-менеджер. */
+export const requiredPhoneSchema = z
+  .string({ invalid_type_error: 'Укажите телефон' })
+  .trim()
+  .min(1, 'Укажите телефон')
+  .regex(PHONE_PATTERN, 'Формат: +7 900 000-00-00');
 
 export const fullNameSchema = z
   .string()
@@ -49,20 +59,67 @@ export const fullNameSchema = z
   .max(120)
   .regex(/^[А-Яа-яЁёA-Za-z\s'-]+$/, 'Только буквы, пробел и дефис');
 
+/**
+ * Полная дата рождения, «ГГГГ-ММ-ДД». С 18 лет до решения юриста:
+ * согласие на обработку ПДн несовершеннолетнего даёт законный
+ * представитель, а механизма для этого на платформе нет. По одному году
+ * порог не проверить — отсюда день и месяц.
+ */
+export const birthDateSchema = z.string({ invalid_type_error: 'Укажите дату рождения' }).superRefine((value, ctx) => {
+  const birth = parseIsoDate(value);
+  if (!birth) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? 'Такой даты нет — проверьте день и месяц'
+        : 'Укажите день, месяц и год рождения',
+    });
+    return;
+  }
+  const age = fullYears(birth, todayInMoscow());
+  if (age < MIN_AGE) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Регистрация — с ${MIN_AGE} лет` });
+  } else if (age > MAX_AGE) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Проверьте год рождения' });
+  }
+});
+
+const scheduleObject = z.object({
+  workDays: z.array(z.enum(WEEKDAYS)).min(1, 'Выберите хотя бы один день'),
+  hoursPerWeek: z
+    .number()
+    .int()
+    .min(MIN_HOURS_PER_WEEK, `От ${MIN_HOURS_PER_WEEK} часов`)
+    .max(MAX_HOURS_PER_WEEK, `Не больше ${MAX_HOURS_PER_WEEK} часов в неделю`)
+    .nullable(),
+});
+
+/**
+ * Часы должны помещаться в дни: один день и сорок часов — не график, а
+ * опечатка. Отдельной функцией, а не .superRefine на шаге: схема с
+ * уточнением перестаёт быть объектом, и её нельзя склеить с другими
+ * шагами через merge — поэтому правило навешивается уже на склейку.
+ */
+function scheduleRule(value: { workDays: readonly string[]; hoursPerWeek: number | null }, ctx: z.RefinementCtx) {
+  const days = new Set(value.workDays).size;
+  if (value.hoursPerWeek === null || days === 0) return;
+  const max = maxHoursPerWeek(days);
+  if (value.hoursPerWeek > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['hoursPerWeek'],
+      message: `При ${days === 1 ? 'одном дне' : days + ' днях'} — не больше ${max} часов в неделю`,
+    });
+  }
+}
+
 /** Шаги мастера валидируются по отдельности — форма проверяет ровно то,
  *  что человек уже заполнил, а не всё сразу. */
 export const registrationSteps = {
   identity: z.object({
     fullName: fullNameSchema,
     gender: z.enum(GENDERS),
-    birthYear: z
-      .number({ invalid_type_error: 'Укажите год рождения' })
-      .int()
-      .min(CURRENT_YEAR - 60, 'Проверьте год')
-      // С 18 лет до решения юриста: согласие на обработку ПДн
-      // несовершеннолетнего даёт законный представитель, а механизма для
-      // этого на платформе нет
-      .max(CURRENT_YEAR - 18, 'Регистрация — с 18 лет'),
+    birthDate: birthDateSchema,
   }),
   photo: z.object({
     photoUrl: z.string().max(500).nullable(),
@@ -76,10 +133,7 @@ export const registrationSteps = {
     studyYear: z.number().int().min(1, 'От 1 курса').max(6, 'До 6 курса'),
     city: z.string().trim().max(80).nullable(),
   }),
-  schedule: z.object({
-    workDays: z.array(z.enum(WEEKDAYS)).min(1, 'Выберите хотя бы один день'),
-    hoursPerWeek: z.number().int().min(4).max(60).nullable(),
-  }),
+  schedule: scheduleObject.superRefine(scheduleRule),
   skills: z.object({
     skills: z.array(z.string().trim().min(1).max(40)).max(20, 'Не больше 20 навыков'),
     lookingFor: lookingForSchema.default([]),
@@ -91,18 +145,33 @@ export const registrationSteps = {
     email: emailSchema,
     password: passwordSchema,
     phone: phoneSchema,
-    consent: z.literal(true, {
-      errorMap: () => ({ message: 'Без согласия на обработку данных регистрация невозможна' }),
-    }),
+    ...consentFields(),
   }),
 } as const;
+
+/**
+ * Три отметки согласия: на ПДн и соглашение — обязательные, рассылка — нет.
+ * Общие для студента и компании: разные тексты, одно правило.
+ */
+export function consentFields() {
+  return {
+    consent: z.literal(true, {
+      errorMap: () => ({ message: 'Без согласия на обработку персональных данных регистрация невозможна' }),
+    }),
+    terms: z.literal(true, {
+      errorMap: () => ({ message: 'Примите пользовательское соглашение' }),
+    }),
+    marketing: z.boolean().default(false),
+  };
+}
 
 export const registrationSchema = registrationSteps.identity
   .merge(registrationSteps.photo)
   .merge(registrationSteps.education)
-  .merge(registrationSteps.schedule)
+  .merge(scheduleObject)
   .merge(registrationSteps.skills)
-  .merge(registrationSteps.account);
+  .merge(registrationSteps.account)
+  .superRefine(scheduleRule);
 
 export type RegistrationInput = z.infer<typeof registrationSchema>;
 
@@ -120,22 +189,14 @@ export type RegistrationInput = z.infer<typeof registrationSchema>;
  * этого шага нужен, поэтому добавлен отдельно.
  */
 export const profileUpdateSchema = registrationSteps.identity
-  // Правило 18+ — для регистрации. Тот, кто зарегистрировался раньше по
-  // правилу 14+, должен сохранять профиль, а не оказаться заперт в анкете
-  .extend({
-    birthYear: z
-      .number({ invalid_type_error: 'Укажите год рождения' })
-      .int()
-      .min(CURRENT_YEAR - 60, 'Проверьте год')
-      .max(CURRENT_YEAR - 14, 'Проверьте год'),
-  })
   .merge(registrationSteps.photo)
   .merge(registrationSteps.education)
-  .merge(registrationSteps.schedule)
+  .merge(scheduleObject)
   .merge(registrationSteps.skills)
   .extend({ phone: phoneSchema })
   // Портфолио частично: поле, которого нет в запросе, не меняется
-  .merge(portfolioSchema.partial());
+  .merge(portfolioSchema.partial())
+  .superRefine(scheduleRule);
 
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 
@@ -173,17 +234,33 @@ export const applicationViewSchema = z.object({
   applicationId: z.string().min(1),
 });
 
-/** HR меняет студента: статус в работе и/или подтверждение учёбы. */
+/**
+ * HR меняет студента: статус в работе, подтверждение учёбы, решение по
+ * справке. Отказ по справке — только с причиной: студент видит её в
+ * профиле, и без неё не знает, что загрузить вместо.
+ */
 export const adminStudentUpdateSchema = z
   .object({
     studentId: z.string().min(1),
     status: z.enum(STUDENT_STATUSES).optional(),
     studyVerified: z.boolean().optional(),
+    studyDecision: z.enum(['APPROVE', 'REJECT']).optional(),
+    note: z.string().trim().max(500, 'Не длиннее 500 символов').optional(),
   })
-  .refine((v) => v.status !== undefined || v.studyVerified !== undefined, {
-    message: 'Нечего менять',
-    path: ['_'],
+  .superRefine((v, ctx) => {
+    if (v.status === undefined && v.studyVerified === undefined && v.studyDecision === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Нечего менять', path: ['_'] });
+    }
+    if (v.studyDecision === 'REJECT' && (!v.note || v.note.length < 5)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['note'], message: 'Напишите причину — студент увидит её в профиле' });
+    }
   });
+
+/** Справка на проверку: файл вида `study`, загруженный через платформу. */
+export const studyDocSchema = z.object({
+  url: z.string().regex(STUDY_FILE_PATTERN, 'Загрузите файл через форму'),
+  name: z.string().trim().min(1, 'Нет имени файла').max(200),
+});
 
 export const messageSchema = z.object({
   body: z
@@ -216,6 +293,13 @@ export const UPLOAD_LIMITS = {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ],
     label: 'PDF или DOC/DOCX до 8 МБ',
+  },
+  // Справка об обучении или фото студенческого. Видит только HR, файл
+  // удаляется сразу после проверки
+  study: {
+    maxBytes: 8 * 1024 * 1024,
+    mime: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+    label: 'PDF, JPG, PNG или WebP до 8 МБ',
   },
 } as const;
 

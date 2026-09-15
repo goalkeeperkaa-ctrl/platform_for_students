@@ -4,6 +4,7 @@ import { countUnread } from '@/lib/chat';
 import { getStore } from '@/lib/db';
 import { studentName } from '@/lib/db/mappers';
 import { getSessionWithRole } from '@/lib/security/guards';
+import { countWaitingApplications } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,9 @@ export const dynamic = 'force-dynamic';
  *
  * Счётчики во вкладках считаются здесь, а не внутри страниц: студент
  * должен видеть, что отклик уже засчитан, из любого раздела — иначе
- * после свайпа приходится идти проверять, дошло ли.
+ * после свайпа приходится идти проверять, дошло ли. Отклики, которые ждут
+ * подтверждения учёбы, считаются вместе с отправленными: для студента это
+ * тоже его решения.
  */
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionWithRole('STUDENT');
@@ -25,10 +28,11 @@ export default async function StudentLayout({ children }: { children: React.Reac
   // куку и отправляем на вход.
   if (!student) redirect('/logout?reason=stale&next=/feed');
 
-  const [applications, skipped, unread] = await Promise.all([
+  const [applications, skipped, unread, waiting] = await Promise.all([
     store.applications.listByStudent(student.id),
     store.swipes.listByStudent(student.id, 'LEFT'),
     countUnread({ role: 'STUDENT', profileId: student.id }),
+    countWaitingApplications(student.id),
   ]);
 
   return (
@@ -36,7 +40,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
       user={{ name: studentName(student), subtitle: student.university, href: '/profile' }}
       nav={[
         { href: '/feed', label: 'Лента' },
-        { href: '/applications', label: 'Отклики', badge: applications.length },
+        { href: '/applications', label: 'Отклики', badge: applications.length + waiting },
         // Значок сообщений показывает непрочитанное, а не общее число:
         // единственное, ради чего сюда заходят, — новый ответ
         { href: '/messages', label: 'Сообщения', badge: unread },

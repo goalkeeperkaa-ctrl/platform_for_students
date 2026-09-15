@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { fail, handle, ok, tooManyRequests } from '@/lib/api';
 import { getStore, isAccountExistsError } from '@/lib/db';
-import { CONSENT_VERSION } from '@/lib/db/seed-data';
+import { STUDENT_CONSENT_VERSION, TERMS_VERSION } from '@/lib/legal';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { HOME_BY_ROLE, SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
         fullName: input.fullName,
         phone: input.phone,
         gender: input.gender,
-        birthYear: input.birthYear,
+        birthYear: Number(input.birthDate.slice(0, 4)),
+        birthDate: input.birthDate,
         photoUrl: input.photoUrl,
         resumeUrl: input.resumeUrl,
         resumeName: input.resumeName,
@@ -53,8 +54,10 @@ export async function POST(request: Request) {
         skills: input.skills,
         about: input.about,
         lookingFor: input.lookingFor,
-        consentVersion: CONSENT_VERSION,
+        consentVersion: STUDENT_CONSENT_VERSION,
         consentIp: ip,
+        termsVersion: TERMS_VERSION,
+        marketingConsent: input.marketing,
       });
 
       const session: SessionUser = {
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
         action: 'consent.granted',
         entity: 'Student',
         entityId: student.id,
-        meta: { version: CONSENT_VERSION },
+        meta: { version: STUDENT_CONSENT_VERSION, terms: TERMS_VERSION, marketing: input.marketing },
       }, request.headers);
       await audit(session, { action: 'student.registered', entity: 'Student', entityId: student.id }, request.headers);
       await track('student.registered', { studentId: student.id });

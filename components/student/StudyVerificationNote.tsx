@@ -34,7 +34,7 @@ export function StudyVerificationNote({
       {!verified && (
         <p className="flex items-center gap-1.5 text-paper-faint">
           <Clock3 className="size-3.5 shrink-0" aria-hidden />
-          Учёбу подтверждает агентство — по студенческому билету или справке
+          Учёбу подтверждает HR-менеджер агентства — по справке об обучении или студенческому билету
         </p>
       )}
       {institutionSlug && (

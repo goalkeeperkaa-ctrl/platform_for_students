@@ -86,6 +86,8 @@ const EMPTY_COMPANY = {
   moderatedAt: null,
   consentVersion: null,
   consentAt: null,
+  inn: null,
+  phoneEnc: null,
 };
 
 async function seed(): Promise<Tables> {
@@ -117,6 +119,9 @@ async function seed(): Promise<Tables> {
         passwordHash: null,
         isActive: true,
         lastLoginAt: null,
+        termsVersion: null,
+        termsAcceptedAt: null,
+        marketingConsentAt: null,
         createdAt: now(),
       };
       t.accounts.push(account);
@@ -171,6 +176,9 @@ async function seed(): Promise<Tables> {
     passwordHash: await hashPassword(DEMO_CREDENTIALS.admin.password),
     isActive: true,
     lastLoginAt: null,
+    termsVersion: null,
+    termsAcceptedAt: null,
+    marketingConsentAt: null,
     createdAt: now(),
   };
   t.accounts.push(adminAccount);
@@ -191,6 +199,9 @@ async function seed(): Promise<Tables> {
     passwordHash: await hashPassword(DEMO_CREDENTIALS.student.password),
     isActive: true,
     lastLoginAt: null,
+    termsVersion: null,
+    termsAcceptedAt: null,
+    marketingConsentAt: null,
     createdAt: now(),
   };
   t.accounts.push(studentAccount);
@@ -202,6 +213,7 @@ async function seed(): Promise<Tables> {
     phoneEnc: encrypt(DEMO_STUDENT_PROFILE.phone),
     gender: DEMO_STUDENT_PROFILE.gender,
     birthYear: DEMO_STUDENT_PROFILE.birthYear,
+    birthDateEnc: encrypt(DEMO_STUDENT_PROFILE.birthDate),
     photoUrl: null,
     resumeUrl: null,
     resumeName: null,
@@ -212,6 +224,10 @@ async function seed(): Promise<Tables> {
     institutionId: institutionFor(DEMO_STUDENT_PROFILE.university)?.id ?? null,
     studyVerified: true,
     studyVerifiedAt: now(),
+    studyDocUrl: null,
+    studyDocName: null,
+    studyDocAt: null,
+    studyReviewNote: null,
     city: DEMO_STUDENT_PROFILE.city,
     workDays: [...DEMO_STUDENT_PROFILE.workDays],
     hoursPerWeek: DEMO_STUDENT_PROFILE.hoursPerWeek,
@@ -246,6 +262,9 @@ async function seed(): Promise<Tables> {
       passwordHash: await hashPassword(DEMO_CREDENTIALS.student.password),
       isActive: true,
       lastLoginAt: null,
+      termsVersion: null,
+      termsAcceptedAt: null,
+      marketingConsentAt: null,
       createdAt: now(),
     };
     t.accounts.push(acc);
@@ -257,6 +276,7 @@ async function seed(): Promise<Tables> {
       phoneEnc: encrypt(extraStudentPhone(i)),
       gender: i % 2 === 0 ? 'MALE' : 'FEMALE',
       birthYear: extra.birthYear,
+      birthDateEnc: encrypt(extra.birthDate),
       university: extra.university,
       speciality: extra.speciality,
       studyYear: 2 + (i % 3),
@@ -363,6 +383,8 @@ function vacancyFromCrm(item: CrmVacancyInput, employerId: string): VacancyRecor
     salaryPeriod: item.salaryPeriod,
     city: item.city,
     district: item.district,
+    address: item.address ?? null,
+    addressDetails: item.addressDetails ?? null,
     workFormat: item.workFormat,
     employmentType: item.employmentType,
     shiftDays: item.shiftDays,
@@ -428,6 +450,9 @@ export async function createMemoryStore(): Promise<DataStore> {
           passwordHash: await hashPassword(input.password),
           isActive: true,
           lastLoginAt: null,
+          termsVersion: null,
+          termsAcceptedAt: null,
+          marketingConsentAt: null,
           createdAt: now(),
         };
         const student: StudentRecord = {
@@ -437,6 +462,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           phoneEnc: input.phone ? encrypt(input.phone) : null,
           gender: input.gender,
           birthYear: input.birthYear,
+          birthDateEnc: encrypt(input.birthDate),
           photoUrl: input.photoUrl,
           resumeUrl: input.resumeUrl,
           resumeName: input.resumeName,
@@ -447,6 +473,10 @@ export async function createMemoryStore(): Promise<DataStore> {
           // Учёбу подтверждает HR, а не форма регистрации
           studyVerified: false,
           studyVerifiedAt: null,
+          studyDocUrl: null,
+          studyDocName: null,
+          studyDocAt: null,
+          studyReviewNote: null,
           city: input.city,
           workDays: input.workDays,
           hoursPerWeek: input.hoursPerWeek,
@@ -461,6 +491,9 @@ export async function createMemoryStore(): Promise<DataStore> {
           createdAt: now(),
           updatedAt: now(),
         };
+        account.termsVersion = input.termsVersion;
+        account.termsAcceptedAt = now();
+        account.marketingConsentAt = input.marketingConsent ? now() : null;
         t.accounts.push(account);
         t.students.push(student);
         return { account: clone(account), student: clone(student) };
@@ -486,6 +519,30 @@ export async function createMemoryStore(): Promise<DataStore> {
         if (!s) return null;
         s.studyVerified = verified;
         s.studyVerifiedAt = verified ? now() : null;
+        // Подтверждена — справка больше не нужна, как и причина прошлого отказа
+        if (verified) Object.assign(s, { studyDocUrl: null, studyDocName: null, studyDocAt: null, studyReviewNote: null });
+        s.updatedAt = now();
+        return clone(s);
+      },
+      async setStudyDocument(id, doc) {
+        const s = t.students.find((x) => x.id === id);
+        if (!s) return null;
+        if (doc) Object.assign(s, { studyDocUrl: doc.url, studyDocName: doc.name, studyDocAt: now(), studyReviewNote: null });
+        else Object.assign(s, { studyDocUrl: null, studyDocName: null, studyDocAt: null });
+        s.updatedAt = now();
+        return clone(s);
+      },
+      async rejectStudy(id, note) {
+        const s = t.students.find((x) => x.id === id);
+        if (!s) return null;
+        Object.assign(s, {
+          studyVerified: false,
+          studyVerifiedAt: null,
+          studyDocUrl: null,
+          studyDocName: null,
+          studyDocAt: null,
+          studyReviewNote: note,
+        });
         s.updatedAt = now();
         return clone(s);
       },
@@ -499,6 +556,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           phoneEnc: input.phone ? encrypt(input.phone) : null,
           gender: input.gender,
           birthYear: input.birthYear,
+          birthDateEnc: encrypt(input.birthDate),
           photoUrl: input.photoUrl,
           resumeUrl: input.resumeUrl,
           resumeName: input.resumeName,
@@ -580,6 +638,9 @@ export async function createMemoryStore(): Promise<DataStore> {
         if (t.accounts.some((a) => a.emailHash === emailHash)) {
           throw new AccountExistsError();
         }
+        if (t.employers.some((e) => e.inn === input.inn)) {
+          throw new InnExistsError();
+        }
         const account: AccountRecord = {
           id: randomUUID(),
           role: 'EMPLOYER',
@@ -588,6 +649,9 @@ export async function createMemoryStore(): Promise<DataStore> {
           passwordHash: await hashPassword(input.password),
           isActive: true,
           lastLoginAt: null,
+          termsVersion: null,
+          termsAcceptedAt: null,
+          marketingConsentAt: null,
           createdAt: now(),
         };
         const employer: EmployerRecord = {
@@ -598,6 +662,8 @@ export async function createMemoryStore(): Promise<DataStore> {
           logoUrl: null,
           crmClientId: null,
           ...structuredClone(EMPTY_COMPANY),
+          inn: input.inn,
+          phoneEnc: encrypt(input.phone),
           industry: input.industry,
           city: input.city,
           // Статус ставит хранилище, а не форма
@@ -606,6 +672,9 @@ export async function createMemoryStore(): Promise<DataStore> {
           consentAt: now(),
           createdAt: now(),
         };
+        account.termsVersion = input.termsVersion;
+        account.termsAcceptedAt = now();
+        account.marketingConsentAt = input.marketingConsent ? now() : null;
         t.accounts.push(account);
         t.employers.push(employer);
         return { account: clone(account), employer: clone(employer) };
@@ -613,7 +682,14 @@ export async function createMemoryStore(): Promise<DataStore> {
       async updateProfile(id, input) {
         const employer = t.employers.find((e) => e.id === id);
         if (!employer) throw new Error('Компания не найдена');
-        Object.assign(employer, structuredClone(input));
+        const { phone, inn, ...profile } = input;
+        if (inn !== undefined && t.employers.some((e) => e.id !== id && e.inn === inn)) {
+          throw new InnExistsError();
+        }
+        Object.assign(employer, structuredClone(profile));
+        // Телефон — ПДн: в запись попадает только шифротекст, как и в базе
+        if (phone !== undefined) employer.phoneEnc = phone ? encrypt(phone) : null;
+        if (inn !== undefined) employer.inn = inn;
         return clone(employer);
       },
       async setModeration(id, { status, note }) {
@@ -698,6 +774,9 @@ export async function createMemoryStore(): Promise<DataStore> {
               passwordHash: null,
               isActive: true,
               lastLoginAt: null,
+              termsVersion: null,
+              termsAcceptedAt: null,
+              marketingConsentAt: null,
               createdAt: now(),
             };
             t.accounts.push(account);
@@ -1009,4 +1088,21 @@ export class AccountExistsError extends Error {
 
 export function isAccountExistsError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ACCOUNT_EXISTS';
+}
+
+/**
+ * Компания с таким ИНН уже зарегистрирована. Опознаётся по коду, а не по
+ * instanceof, — по той же причине, что и AccountExistsError: в разработке
+ * модуль бывает загружен дважды, и класс из одной копии не узнаёт другую.
+ */
+export class InnExistsError extends Error {
+  readonly code = 'INN_EXISTS';
+  constructor() {
+    super('Компания с таким ИНН уже зарегистрирована');
+    this.name = 'InnExistsError';
+  }
+}
+
+export function isInnExistsError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'INN_EXISTS';
 }

@@ -77,10 +77,15 @@ export function SwipeDeck({ initial }: { initial: VacancyDTO[] }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vacancyId: card.id, direction }),
         });
-        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error);
+        const data = (await response.json().catch(() => ({}))) as { error?: string; pending?: boolean };
+        if (!response.ok) throw new Error(data.error);
 
         if (direction === 'RIGHT') {
-          toast.success('Отклик отправлен', `${card.title} · ${card.company}`);
+          if (data.pending) {
+            toast.success('Отклик сохранён', 'Уйдёт работодателю, как только HR-менеджер подтвердит учёбу');
+          } else {
+            toast.success('Отклик отправлен', `${card.title} · ${card.company}`);
+          }
           // Раздел «Отклики» рендерится на сервере — обновляем его данные
           router.refresh();
         }

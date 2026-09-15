@@ -4,44 +4,56 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
+import { ConsentChecks } from '@/components/legal/ConsentChecks';
 import { companyRegistrationSchema } from '@/lib/company';
-import { durations, easeOutExpo, springSnappy } from '@/lib/motion';
-import { cn } from '@/lib/utils';
+import { normalizeInn } from '@/lib/inn';
+import { durations, easeOutExpo } from '@/lib/motion';
+import { PILOT_CITY } from '@/lib/pilot';
 
 interface FormState {
   companyName: string;
+  inn: string;
   contactName: string;
+  phone: string;
   email: string;
   password: string;
   industry: string;
   city: string;
   consent: boolean;
+  terms: boolean;
+  marketing: boolean;
 }
 
 const INITIAL: FormState = {
   companyName: '',
+  inn: '',
   contactName: '',
+  phone: '',
   email: '',
   password: '',
   industry: '',
-  city: '',
+  city: PILOT_CITY,
   consent: false,
+  terms: false,
+  marketing: false,
 };
 
 /**
  * Регистрация компании.
  *
  * Одна короткая форма, а не мастер: у компании на входе нужно ровно то,
- * без чего нельзя завести кабинет. Страницу компании — описание, фото,
- * культуру — заполняют уже внутри, спокойно, а не на пороге.
+ * без чего нельзя завести кабинет и проверить компанию. Страницу компании —
+ * описание, фото, культуру — заполняют уже внутри, спокойно, а не на пороге.
  *
- * Сразу говорим про модерацию: компания, которая узнаёт о проверке только
- * после того, как оформила вакансию, чувствует себя обманутой.
+ * ИНН и телефон — для проверки: HR-менеджер сверяет ИНН с госреестром и,
+ * если в открытых источниках о компании ничего нет, звонит. Сразу говорим
+ * про модерацию: компания, которая узнаёт о проверке только после того, как
+ * оформила вакансию, чувствует себя обманутой.
  */
 export function CompanyRegistrationForm() {
   const router = useRouter();
@@ -107,7 +119,7 @@ export function CompanyRegistrationForm() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: durations.slow, ease: easeOutExpo }}
-        className="w-full max-w-[28rem]"
+        className="w-full max-w-[30rem]"
       >
         <div className="mb-9 flex justify-center">
           <Logo />
@@ -116,8 +128,9 @@ export function CompanyRegistrationForm() {
         <div className="glass rounded-3xl p-6 sm:p-8">
           <h1 className="text-display-sm text-paper">Регистрация компании</h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-paper-dim">
-            Кабинет откроется сразу. Студенты увидят компанию и вакансии после проверки
-            агентством — это защищает их от фейковых работодателей.
+            Кабинет откроется сразу. Студенты увидят компанию и вакансии после проверки агентством:
+            HR-менеджер сверит ИНН с госреестром и при необходимости позвонит. Это защищает студентов
+            от фейковых работодателей.
           </p>
 
           <form onSubmit={submit} className="mt-6 space-y-3" noValidate>
@@ -129,12 +142,31 @@ export function CompanyRegistrationForm() {
               onChange={(e) => patch({ companyName: e.target.value })}
             />
             <TextField
+              label="ИНН"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={12}
+              value={form.inn}
+              error={errors.inn}
+              hint="10 цифр у организации, 12 у ИП. По нему агентство проверит компанию в госреестре."
+              onChange={(e) => patch({ inn: normalizeInn(e.target.value).slice(0, 12) })}
+            />
+            <TextField
               label="Кто будет вести кабинет"
               autoComplete="name"
               value={form.contactName}
               error={errors.contactName}
               hint="Имя и фамилия. Студентам не показывается."
               onChange={(e) => patch({ contactName: e.target.value })}
+            />
+            <TextField
+              label="Телефон для связи"
+              type="tel"
+              autoComplete="tel"
+              value={form.phone}
+              error={errors.phone}
+              hint="HR-менеджер позвонит, если нужно подтвердить компанию. Студентам не показывается."
+              onChange={(e) => patch({ phone: e.target.value })}
             />
             <TextField
               label="Рабочая почта"
@@ -166,41 +198,19 @@ export function CompanyRegistrationForm() {
                 autoComplete="address-level2"
                 value={form.city}
                 error={errors.city}
-                hint="Необязательно"
+                hint="Пилот — в Казани"
                 onChange={(e) => patch({ city: e.target.value })}
               />
             </div>
 
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={form.consent}
-              onClick={() => patch({ consent: !form.consent })}
-              className={cn(
-                'flex w-full items-start gap-3 rounded-2xl border p-4 text-left text-[13px] leading-relaxed transition-colors',
-                errors.consent
-                  ? 'border-danger/50 bg-danger/[0.06]'
-                  : 'border-[var(--hairline)] bg-graphite-950/40 hover:border-paper/20',
-              )}
-            >
-              <span
-                className={cn(
-                  'mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border transition-colors',
-                  form.consent ? 'border-accent-400 bg-accent-500' : 'border-paper/30',
-                )}
-              >
-                {form.consent && (
-                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={springSnappy}>
-                    <Check className="size-3.5 text-paper" aria-hidden />
-                  </motion.span>
-                )}
-              </span>
-              <span className="text-paper-dim">
-                Согласен на обработку моих персональных данных — имени и рабочей почты — Fattakhov HR
-                Agency для работы кабинета компании.
-              </span>
-            </button>
-            {errors.consent && <p className="text-[12.5px] text-danger">{errors.consent}</p>}
+            <div className="pt-2">
+              <ConsentChecks
+                kind="company"
+                value={{ consent: form.consent, terms: form.terms, marketing: form.marketing }}
+                errors={errors}
+                onChange={(next) => patch(next)}
+              />
+            </div>
 
             <Button type="submit" size="lg" loading={pending} className="mt-2 w-full" iconRight={<ArrowRight />}>
               Зарегистрировать компанию

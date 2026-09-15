@@ -10,12 +10,13 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Раздача фото и резюме.
+ * Раздача фото, резюме и справок.
  *
  * Файлы — персональные данные, поэтому доступ проверяется на каждый
  * запрос, а не однократно при выдаче ссылки. Правило простое: студент
- * видит только свои файлы, работодатель — файлы тех, кто откликнулся
- * на его вакансии, администратор — все.
+ * видит только свои файлы, работодатель — фото и резюме тех, кто
+ * откликнулся на его вакансии, администратор — все. Справку об обучении
+ * работодатель не видит никогда: учёбу за него проверяет агентство.
  */
 export async function GET(
   _request: Request,
@@ -99,7 +100,7 @@ async function canRead(session: SessionUser, url: string): Promise<boolean> {
 
   if (session.role === 'STUDENT') {
     const student = await store.students.findByAccountId(session.accountId);
-    return !!student && (student.photoUrl === url || student.resumeUrl === url);
+    return !!student && (student.photoUrl === url || student.resumeUrl === url || student.studyDocUrl === url);
   }
 
   if (session.role === 'EMPLOYER') {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock3, Send, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Clock3, MapPin, Send, TriangleAlert, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { SelectField, TextAreaField, TextField } from '@/components/ui/Field';
@@ -32,6 +32,7 @@ import {
   VACANCY_LIMITS,
   formToVacancyPayload,
   vacancyInputSchema,
+  type CompanyAddress,
   type VacancyFormState,
 } from '@/lib/vacancy';
 
@@ -55,12 +56,15 @@ export function VacancyEditor({
   moderationNote = null,
   initial,
   companyStatus,
+  knownAddresses = [],
 }: {
   vacancyId?: string;
   status?: VacancyStatus;
   moderationNote?: string | null;
   initial: VacancyFormState;
   companyStatus: ModerationStatus;
+  /** Адреса прошлых вакансий компании — подставить в одно нажатие */
+  knownAddresses?: CompanyAddress[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -238,6 +242,54 @@ export function VacancyEditor({
                 error={fieldError('district')}
                 hint="Необязательно"
                 onChange={(e) => patch({ district: e.target.value })}
+              />
+            </div>
+            {knownAddresses.length > 0 && (
+              <div>
+                <p className="mb-2 pl-1 text-[12.5px] text-paper-faint">Адреса ваших вакансий — нажмите, чтобы подставить:</p>
+                <div className="flex flex-wrap gap-2">
+                  {knownAddresses.map((item) => (
+                    <Chip
+                      key={[item.city, item.address, item.addressDetails ?? ''].join('|')}
+                      size="sm"
+                      selected={
+                        form.city === item.city && form.address === item.address && form.addressDetails === (item.addressDetails ?? '')
+                      }
+                      onToggle={() =>
+                        patch({
+                          city: item.city,
+                          district: item.district ?? '',
+                          address: item.address,
+                          addressDetails: item.addressDetails ?? '',
+                        })
+                      }
+                    >
+                      <MapPin className="size-3.5" aria-hidden />
+                      {item.address}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
+              <TextField
+                label="Улица и дом"
+                autoComplete="street-address"
+                value={form.address}
+                error={fieldError('address')}
+                hint={
+                  form.workFormat === 'REMOTE'
+                    ? 'Для удалённой работы необязательно'
+                    : 'Например: ул. Баумана, 44. Студент увидит адрес и ссылку на карту.'
+                }
+                onChange={(e) => patch({ address: e.target.value })}
+              />
+              <TextField
+                label="Офис, этаж, вход"
+                value={form.addressDetails}
+                error={fieldError('addressDetails')}
+                hint="Необязательно"
+                onChange={(e) => patch({ addressDetails: e.target.value })}
               />
             </div>
           </div>

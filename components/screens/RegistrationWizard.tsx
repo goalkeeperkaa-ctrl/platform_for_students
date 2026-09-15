@@ -3,34 +3,33 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { z } from 'zod';
 import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
-import { SelectField, TextAreaField, TextField } from '@/components/ui/Field';
+import { TextAreaField, TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
+import { BirthDateField } from '@/components/forms/BirthDateField';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
+import { ScheduleFields } from '@/components/forms/ScheduleFields';
 import { SkillsInput } from '@/components/forms/SkillsInput';
 import { UniversityInput } from '@/components/forms/UniversityInput';
+import { ConsentChecks } from '@/components/legal/ConsentChecks';
 import { useCurtainNav } from '@/components/motion/RouteCurtain';
 import { durations, easeOutExpo, springSoft, stepVariants } from '@/lib/motion';
+import { PILOT_CITY } from '@/lib/pilot';
 import { registrationSteps } from '@/lib/validation';
-import { cn } from '@/lib/utils';
 import {
   GENDERS,
   LOOKING_FOR,
   LOOKING_FOR_LABEL,
-  WEEKDAYS,
-  WEEKDAY_LABEL,
   type Gender,
   type InstitutionOption,
   type LookingFor,
   type Weekday,
 } from '@/lib/types';
-
-const CURRENT_YEAR = new Date().getFullYear();
 
 const STEP_META = [
   { key: 'identity', title: 'Как вас зовут', hint: 'Так вас увидит работодатель' },
@@ -41,8 +40,6 @@ const STEP_META = [
   { key: 'account', title: 'Вход и согласие', hint: 'Последний шаг' },
 ] as const;
 
-const HOURS_OPTIONS = [8, 12, 16, 20, 24, 30, 40];
-
 const GENDER_LABEL: Record<Gender, string> = {
   FEMALE: 'Женский',
   MALE: 'Мужской',
@@ -52,7 +49,7 @@ const GENDER_LABEL: Record<Gender, string> = {
 interface FormState {
   fullName: string;
   gender: Gender;
-  birthYear: number;
+  birthDate: string;
   photoUrl: string | null;
   university: string;
   institutionId: string | null;
@@ -70,18 +67,20 @@ interface FormState {
   password: string;
   phone: string;
   consent: boolean;
+  terms: boolean;
+  marketing: boolean;
 }
 
 const INITIAL: FormState = {
   fullName: '',
   gender: 'UNSPECIFIED',
-  birthYear: CURRENT_YEAR - 19,
+  birthDate: '',
   photoUrl: null,
   university: '',
   institutionId: null,
   speciality: '',
   studyYear: 1,
-  city: 'Москва',
+  city: PILOT_CITY,
   workDays: [],
   hoursPerWeek: 20,
   skills: [],
@@ -93,6 +92,8 @@ const INITIAL: FormState = {
   password: '',
   phone: '',
   consent: false,
+  terms: false,
+  marketing: false,
 };
 
 /**
@@ -136,7 +137,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
   const stepPayload = useMemo(() => {
     switch (meta.key) {
       case 'identity':
-        return { fullName: form.fullName, gender: form.gender, birthYear: form.birthYear };
+        return { fullName: form.fullName, gender: form.gender, birthDate: form.birthDate };
       case 'photo':
         return { photoUrl: form.photoUrl };
       case 'education':
@@ -163,6 +164,8 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
           password: form.password,
           phone: form.phone,
           consent: form.consent,
+          terms: form.terms,
+          marketing: form.marketing,
         };
     }
   }, [form, meta.key]);
@@ -341,15 +344,10 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
               </div>
             </fieldset>
 
-            <SelectField
-              label="Год рождения"
-              value={String(form.birthYear)}
-              error={errors.birthYear}
-              onChange={(e) => patch({ birthYear: Number(e.target.value) })}
-              options={Array.from({ length: 27 }, (_, i) => {
-                const year = CURRENT_YEAR - 18 - i;
-                return { value: String(year), label: String(year) };
-              })}
+            <BirthDateField
+              value={form.birthDate}
+              error={errors.birthDate}
+              onChange={(birthDate) => patch({ birthDate })}
             />
           </div>
         );
@@ -408,6 +406,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
               label="Город"
               value={form.city}
               error={errors.city}
+              hint="Пилот платформы проходит в Казани — вакансии пока только здесь."
               onChange={(e) => patch({ city: e.target.value })}
             />
           </div>
@@ -415,52 +414,12 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
 
       case 'schedule':
         return (
-          <div className="space-y-8">
-            <fieldset>
-              <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
-                В какие дни готовы работать
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {WEEKDAYS.map((day) => (
-                  <Chip
-                    key={day}
-                    selected={form.workDays.includes(day)}
-                    onToggle={() =>
-                      patch({
-                        workDays: form.workDays.includes(day)
-                          ? form.workDays.filter((d) => d !== day)
-                          : [...form.workDays, day],
-                      })
-                    }
-                    className="min-w-[3.25rem] justify-center"
-                  >
-                    {WEEKDAY_LABEL[day]}
-                  </Chip>
-                ))}
-              </div>
-              {errors.workDays && <p className="pt-2.5 text-[12.5px] text-danger">{errors.workDays}</p>}
-            </fieldset>
-
-            <fieldset>
-              <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
-                Сколько часов в неделю
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {HOURS_OPTIONS.map((hours) => (
-                  <Chip
-                    key={hours}
-                    selected={form.hoursPerWeek === hours}
-                    onToggle={() => patch({ hoursPerWeek: hours })}
-                  >
-                    до {hours} ч
-                  </Chip>
-                ))}
-              </div>
-              <p className="pt-3 text-[12.5px] leading-snug text-paper-faint">
-                Вакансии с большей нагрузкой опустятся ниже в ленте, но не исчезнут.
-              </p>
-            </fieldset>
-          </div>
+          <ScheduleFields
+            workDays={form.workDays}
+            hoursPerWeek={form.hoursPerWeek}
+            errors={errors}
+            onChange={(next) => patch(next)}
+          />
         );
 
       case 'skills':
@@ -549,87 +508,17 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
               onChange={(e) => patch({ phone: e.target.value })}
             />
 
-            <ConsentBox
-              checked={form.consent}
-              error={errors.consent}
-              onToggle={() => patch({ consent: !form.consent })}
+            <ConsentChecks
+              kind="student"
+              value={{ consent: form.consent, terms: form.terms, marketing: form.marketing }}
+              errors={errors}
+              onChange={(next) => patch(next)}
             />
           </div>
         );
     }
   }
 }
-
-function ConsentBox({
-  checked,
-  error,
-  onToggle,
-}: {
-  checked: boolean;
-  error?: string;
-  onToggle: () => void;
-}) {
-  return (
-    <div>
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        onClick={onToggle}
-        className={cn(
-          'flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors duration-300',
-          checked
-            ? 'border-accent-400/50 bg-accent-500/[0.09]'
-            : error
-              ? 'border-danger/50 bg-danger/[0.05]'
-              : 'border-[var(--hairline)] bg-graphite-900/45 hover:border-paper/22',
-        )}
-      >
-        <motion.span
-          animate={{
-            backgroundColor: checked ? 'rgba(110,136,162,0.9)' : 'rgba(248,248,248,0.06)',
-            borderColor: checked ? 'rgba(141,163,185,0.9)' : 'rgba(248,248,248,0.18)',
-          }}
-          transition={{ duration: durations.micro }}
-          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border"
-        >
-          <motion.span
-            initial={false}
-            animate={{ scale: checked ? 1 : 0, opacity: checked ? 1 : 0 }}
-            transition={springSoft}
-          >
-            <Check className="size-3.5 text-ink" strokeWidth={3} />
-          </motion.span>
-        </motion.span>
-
-        <span className="text-[13px] leading-relaxed text-paper-dim">
-          Я согласен на обработку персональных данных: ФИО, контакты, сведения об образовании и
-          резюме передаются работодателям, которым я откликнулся. Данные хранятся в зашифрованном
-          виде, согласие можно отозвать в профиле.
-        </span>
-      </button>
-
-      <AnimatePresence>
-        {error && (
-          <motion.p
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden pl-1 pt-2 text-[12.5px] text-danger"
-          >
-            {error}
-          </motion.p>
-        )}
-      </AnimatePresence>
-
-      <p className="mt-3 flex items-center gap-1.5 pl-1 text-[12px] text-paper-faint">
-        <ShieldCheck className="size-3.5 shrink-0 text-accent-400" aria-hidden />
-        Шифрование AES-256, доступ по ролям, журнал обращений к данным
-      </p>
-    </div>
-  );
-}
-
 
 function SuccessState({ name }: { name: string }) {
   return (
@@ -672,6 +561,10 @@ function SuccessState({ name }: { name: string }) {
       <p className="mt-3 max-w-[36ch] text-[15px] leading-relaxed text-paper-dim">
         {name ? `${name.split(' ')[0]}, п` : 'П'}одборка уже собирается под ваш график. Сейчас
         откроем ленту.
+      </p>
+      <p className="mt-3 max-w-[40ch] text-[13.5px] leading-relaxed text-paper-faint">
+        Чтобы отклики уходили работодателям, загрузите в профиле справку об обучении —
+        HR-менеджер подтвердит учёбу.
       </p>
       <Link
         href="/feed"

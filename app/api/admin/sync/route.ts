@@ -95,5 +95,8 @@ async function fetchCrmVacancies() {
   return (payload.vacancies as typeof CRM_VACANCIES).map((v) => ({
     ...v,
     publishedAt: new Date(v.publishedAt),
+    // Старая выгрузка CRM адреса не знает — это не ошибка, а пустой адрес
+    address: v.address ?? null,
+    addressDetails: v.addressDetails ?? null,
   }));
 }

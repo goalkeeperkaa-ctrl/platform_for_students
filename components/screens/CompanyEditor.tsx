@@ -11,6 +11,7 @@ import { TextAreaField, TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { companyProfileSchema } from '@/lib/company';
+import { normalizeInn } from '@/lib/inn';
 import { durations, easeOutExpo } from '@/lib/motion';
 import type { LinkItem, ModerationStatus } from '@/lib/types';
 
@@ -20,6 +21,8 @@ const LIMITS = { socials: 8, photos: 6 } as const;
 export interface CompanyFormState {
   companyName: string;
   contactName: string;
+  phone: string;
+  inn: string;
   logoUrl: string | null;
   industry: string;
   about: string;
@@ -82,6 +85,9 @@ export function CompanyEditor({
       website: form.website || null,
       city: form.city || null,
       videoUrl: form.videoUrl || null,
+      phone: form.phone || null,
+      // ИНН проверенной компании не меняется — и не отправляется
+      inn: moderation.status === 'APPROVED' || !form.inn ? undefined : form.inn,
     };
 
     const parsed = companyProfileSchema.safeParse(payload);
@@ -308,15 +314,42 @@ export function CompanyEditor({
           </div>
         </Section>
 
-        <Section title="Контактное лицо">
-          <TextField
-            label="Кто ведёт кабинет"
-            autoComplete="name"
-            value={form.contactName}
-            error={errors.contactName}
-            hint="Видит только агентство. На странице компании не показывается."
-            onChange={(e) => patch({ contactName: e.target.value })}
-          />
+        <Section title="Контактное лицо и реквизиты">
+          <div className="space-y-5">
+            <TextField
+              label="Кто ведёт кабинет"
+              autoComplete="name"
+              value={form.contactName}
+              error={errors.contactName}
+              hint="Видит только агентство. На странице компании не показывается."
+              onChange={(e) => patch({ contactName: e.target.value })}
+            />
+            <TextField
+              label="Телефон для связи"
+              type="tel"
+              autoComplete="tel"
+              value={form.phone}
+              error={errors.phone}
+              hint="По нему агентство подтверждает компанию. Студентам не показывается."
+              onChange={(e) => patch({ phone: e.target.value })}
+            />
+            {selfRegistered && (
+              <TextField
+                label="ИНН"
+                inputMode="numeric"
+                maxLength={12}
+                value={form.inn}
+                error={errors.inn}
+                disabled={moderation.status === 'APPROVED'}
+                hint={
+                  moderation.status === 'APPROVED'
+                    ? 'Компания проверена по этому ИНН. Если он неверный — напишите в агентство.'
+                    : '10 цифр у организации, 12 у ИП.'
+                }
+                onChange={(e) => patch({ inn: normalizeInn(e.target.value).slice(0, 12) })}
+              />
+            )}
+          </div>
         </Section>
       </div>
 

@@ -135,18 +135,19 @@ async function main() {
 
   // --- Студенты: ФИО и телефон ---------------------------------------
   const students = await prisma.student.findMany({
-    select: { id: true, fullNameEnc: true, phoneEnc: true },
+    select: { id: true, fullNameEnc: true, phoneEnc: true, birthDateEnc: true },
   });
   for (const s of students) {
     const name = read(s.fullNameEnc, fresh, stale);
     const phone = s.phoneEnc ? read(s.phoneEnc, fresh, stale) : undefined;
+    const birth = s.birthDateEnc ? read(s.birthDateEnc, fresh, stale) : undefined;
 
-    if (!name || phone === null) {
+    if (!name || phone === null || birth === null) {
       stats.unreadable++;
       lost.push(`Student ${s.id}`);
       continue;
     }
-    if (!name.stale && (!phone || !phone.stale)) {
+    if (!name.stale && (!phone || !phone.stale) && (!birth || !birth.stale)) {
       stats.fresh++;
       continue;
     }
@@ -157,11 +158,35 @@ async function main() {
         data: {
           fullNameEnc: encrypt(name.text),
           ...(phone ? { phoneEnc: encrypt(phone.text) } : {}),
+          ...(birth ? { birthDateEnc: encrypt(birth.text) } : {}),
         },
       });
     }
   }
   console.log(`  Student   всего ${students.length}`);
+
+  // --- Компании: телефон контактного лица ----------------------------
+  const employers = await prisma.employer.findMany({
+    where: { phoneEnc: { not: null } },
+    select: { id: true, phoneEnc: true },
+  });
+  for (const e of employers) {
+    const phone = read(e.phoneEnc as string, fresh, stale);
+    if (!phone) {
+      stats.unreadable++;
+      lost.push(`Employer ${e.id}`);
+      continue;
+    }
+    if (!phone.stale) {
+      stats.fresh++;
+      continue;
+    }
+    stats.rotated++;
+    if (apply) {
+      await prisma.employer.update({ where: { id: e.id }, data: { phoneEnc: encrypt(phone.text) } });
+    }
+  }
+  console.log(`  Employer  всего ${employers.length}`);
 
   // --- Переписка ------------------------------------------------------
   const messages = await prisma.message.findMany({ select: { id: true, bodyEnc: true } });

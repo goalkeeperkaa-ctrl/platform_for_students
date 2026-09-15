@@ -1,5 +1,6 @@
 import 'server-only';
 import { Prisma } from '@prisma/client';
+import { InnExistsError } from './memory';
 import { blindIndex, encrypt } from '@/lib/security/crypto';
 import { hashPassword } from '@/lib/security/password';
 import { readCompanyProfile } from '@/lib/company';
@@ -26,6 +27,12 @@ function toStudentRecord<T extends Parameters<typeof readPortfolio>[0]>(row: T) 
  */
 function toEmployerRecord<T extends Parameters<typeof readCompanyProfile>[0]>(row: T) {
   return { ...row, ...readCompanyProfile(row) };
+}
+
+/** Поле уникального ограничения из ошибки P2002: почта или ИНН. */
+function uniqueTarget(err: Prisma.PrismaClientKnownRequestError): string {
+  const target = err.meta?.target;
+  return Array.isArray(target) ? target.join(',') : String(target ?? '');
 }
 
 /** Значение для JSON-колонки; undefined оставляет колонку как есть. */
@@ -86,12 +93,16 @@ export function createPrismaStore(): DataStore {
               emailEnc: encrypt(input.email),
               emailHash,
               passwordHash,
+              termsVersion: input.termsVersion,
+              termsAcceptedAt: new Date(),
+              marketingConsentAt: input.marketingConsent ? new Date() : null,
               student: {
                 create: {
                   fullNameEnc: encrypt(input.fullName),
                   phoneEnc: input.phone ? encrypt(input.phone) : null,
                   gender: input.gender,
                   birthYear: input.birthYear,
+                  birthDateEnc: encrypt(input.birthDate),
                   photoUrl: input.photoUrl,
                   resumeUrl: input.resumeUrl,
                   resumeName: input.resumeName,
@@ -117,7 +128,8 @@ export function createPrismaStore(): DataStore {
           return { account: rest, student: toStudentRecord(student) };
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            throw new AccountExistsError();
+            // Уникальных полей два — почта и ИНН компании: отличаем по полю
+            throw uniqueTarget(err).includes('inn') ? new InnExistsError() : new AccountExistsError();
           }
           throw err;
         }
@@ -142,7 +154,39 @@ export function createPrismaStore(): DataStore {
         if (!exists) return null;
         const row = await prisma.student.update({
           where: { id },
-          data: { studyVerified: verified, studyVerifiedAt: verified ? new Date() : null },
+          data: {
+            studyVerified: verified,
+            studyVerifiedAt: verified ? new Date() : null,
+            // Подтверждена — справка больше не нужна, как и причина прошлого отказа
+            ...(verified ? { studyDocUrl: null, studyDocName: null, studyDocAt: null, studyReviewNote: null } : {}),
+          },
+        });
+        return toStudentRecord(row);
+      },
+      async setStudyDocument(id, doc) {
+        const exists = await prisma.student.findUnique({ where: { id }, select: { id: true } });
+        if (!exists) return null;
+        const row = await prisma.student.update({
+          where: { id },
+          data: doc
+            ? { studyDocUrl: doc.url, studyDocName: doc.name, studyDocAt: new Date(), studyReviewNote: null }
+            : { studyDocUrl: null, studyDocName: null, studyDocAt: null },
+        });
+        return toStudentRecord(row);
+      },
+      async rejectStudy(id, note) {
+        const exists = await prisma.student.findUnique({ where: { id }, select: { id: true } });
+        if (!exists) return null;
+        const row = await prisma.student.update({
+          where: { id },
+          data: {
+            studyVerified: false,
+            studyVerifiedAt: null,
+            studyDocUrl: null,
+            studyDocName: null,
+            studyDocAt: null,
+            studyReviewNote: note,
+          },
         });
         return toStudentRecord(row);
       },
@@ -158,6 +202,7 @@ export function createPrismaStore(): DataStore {
             phoneEnc: input.phone ? encrypt(input.phone) : null,
             gender: input.gender,
             birthYear: input.birthYear,
+            birthDateEnc: encrypt(input.birthDate),
             photoUrl: input.photoUrl,
             resumeUrl: input.resumeUrl,
             resumeName: input.resumeName,
@@ -222,12 +267,17 @@ export function createPrismaStore(): DataStore {
               emailEnc: encrypt(input.email),
               emailHash,
               passwordHash,
+              termsVersion: input.termsVersion,
+              termsAcceptedAt: new Date(),
+              marketingConsentAt: input.marketingConsent ? new Date() : null,
               employer: {
                 create: {
                   companyName: input.companyName,
                   contactName: input.contactName,
                   industry: input.industry,
                   city: input.city,
+                  inn: input.inn,
+                  phoneEnc: encrypt(input.phone),
                   // Статус ставит хранилище, а не форма: компания из запроса
                   // не может объявить себя одобренной
                   moderationStatus: 'PENDING',
@@ -243,7 +293,11 @@ export function createPrismaStore(): DataStore {
           return { account: rest, employer: toEmployerRecord(employer) };
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            throw new AccountExistsError();
+            // Уникальных полей два — почта и ИНН. Имя поля в ошибке вложенной
+            // записи Prisma не сообщает («not available»), поэтому спрашиваем
+            // базу — в том же порядке, что и хранилище в памяти: сначала почта
+            const emailTaken = (await prisma.account.count({ where: { emailHash } })) > 0;
+            throw emailTaken ? new AccountExistsError() : new InnExistsError();
           }
           throw err;
         }
@@ -263,7 +317,12 @@ export function createPrismaStore(): DataStore {
             socials: json(input.socials),
             photos: input.photos,
             videoUrl: input.videoUrl,
+            ...(input.phone !== undefined ? { phoneEnc: input.phone ? encrypt(input.phone) : null } : {}),
+            ...(input.inn !== undefined ? { inn: input.inn } : {}),
           },
+        }).catch((err: unknown) => {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') throw new InnExistsError();
+          throw err;
         });
         return toEmployerRecord(row);
       },
@@ -560,6 +619,8 @@ function vacancyData(item: CrmVacancyInput, employerId: string) {
     salaryPeriod: item.salaryPeriod,
     city: item.city,
     district: item.district,
+    address: item.address ?? null,
+    addressDetails: item.addressDetails ?? null,
     workFormat: item.workFormat,
     employmentType: item.employmentType,
     shiftDays: item.shiftDays,

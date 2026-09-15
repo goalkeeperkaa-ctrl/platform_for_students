@@ -178,12 +178,14 @@ async function main() {
   // подходящая под него, лежит в базе открытым текстом.
   const shaped = /^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
   const accounts = await db.account.findMany({ select: { emailEnc: true } });
-  const students = await db.student.findMany({ select: { fullNameEnc: true, phoneEnc: true } });
+  const students = await db.student.findMany({ select: { fullNameEnc: true, phoneEnc: true, birthDateEnc: true } });
+  const employers = await db.employer.findMany({ select: { phoneEnc: true } });
   const messages = await db.message.findMany({ select: { bodyEnc: true } });
 
   const plain = [
     ...accounts.map((a) => a.emailEnc),
-    ...students.flatMap((s) => [s.fullNameEnc, s.phoneEnc]),
+    ...students.flatMap((s) => [s.fullNameEnc, s.phoneEnc, s.birthDateEnc]),
+    ...employers.map((e) => e.phoneEnc),
     ...messages.map((m) => m.bodyEnc),
   ].filter((v) => v && !shaped.test(v));
 

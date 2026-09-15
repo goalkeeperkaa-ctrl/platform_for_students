@@ -68,7 +68,7 @@ export function UniversityInput({
             ? `${selected.name} · ${selected.city}`
             : institutions.length > 0
               ? 'Начните вводить — подскажем из списка. Нет вашего вуза — впишите как есть.'
-              : 'Например, НИУ ВШЭ'
+              : 'Например, КФУ'
         }
         onChange={(e) => {
           const text = e.target.value;

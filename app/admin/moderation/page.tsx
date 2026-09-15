@@ -3,19 +3,19 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ModerationQueue } from '@/components/screens/ModerationQueue';
 import { adminNav } from '@/lib/admin-nav';
 import { requireAdminPage } from '@/lib/security/guards';
-import { buildModerationQueue } from '@/lib/services';
+import { buildModerationQueue, countPendingStudyDocs } from '@/lib/services';
 
 export const metadata: Metadata = { title: 'Модерация' };
 export const dynamic = 'force-dynamic';
 
 export default async function ModerationPage() {
   const session = await requireAdminPage('/admin/moderation');
-  const queue = await buildModerationQueue();
+  const [queue, pendingStudy] = await Promise.all([buildModerationQueue(), countPendingStudyDocs()]);
 
   return (
     <AppShell
       user={{ name: session.name || 'HR-менеджер', subtitle: 'Fattakhov HR Agency' }}
-      nav={adminNav(queue.companies.length + queue.vacancies.length)}
+      nav={adminNav(queue.companies.length + queue.vacancies.length, pendingStudy)}
       wide
     >
       <ModerationQueue companies={queue.companies} vacancies={queue.vacancies} />

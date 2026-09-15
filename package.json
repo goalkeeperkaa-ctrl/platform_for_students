@@ -21,6 +21,7 @@
     "keys": "tsx scripts/generate-keys.ts",
     "keys:rotate": "node --conditions=react-server --import tsx scripts/rotate-pii-key.ts",
     "smoke": "tsx tests/smoke.ts",
+    "test:unit": "tsx tests/unit.ts",
     "db:connect": "node scripts/db-connect.mjs",
     "employer:code": "node --conditions=react-server --import tsx scripts/issue-access-code.ts",
     "institutions:load": "node --conditions=react-server --import tsx scripts/load-institutions.ts",

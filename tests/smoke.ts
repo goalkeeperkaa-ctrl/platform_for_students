@@ -15,6 +15,25 @@
 
 const BASE = process.env.SMOKE_URL ?? 'http://localhost:3007';
 
+/**
+ * Дата «ГГГГ-ММ-ДД» столько-то лет назад со сдвигом в днях. Запас в пару
+ * дней снимает расхождение пояса машины и Москвы на границе суток.
+ */
+function isoYearsAgo(years: number, days = 0): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - years);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Случайный ИНН организации с верной контрольной цифрой — свой на каждый прогон. */
+function randomInn(): string {
+  const digits = Array.from({ length: 9 }, (_, i) => (i === 0 ? 1 + Math.floor(Math.random() * 9) : Math.floor(Math.random() * 10)));
+  const weights = [2, 4, 10, 3, 5, 9, 4, 6, 8];
+  const check = (weights.reduce((sum, w, i) => sum + w * digits[i], 0) % 11) % 10;
+  return [...digits, check].join('');
+}
+
 let passed = 0;
 const failures: string[] = [];
 
@@ -84,12 +103,12 @@ async function main() {
   const registered = await student.post('/api/auth/register', {
     fullName: 'Тест Тестов',
     gender: 'MALE',
-    birthYear: 2005,
+    birthDate: '2005-04-12',
     photoUrl: null,
-    university: 'МГУ',
+    university: 'КФУ',
     speciality: 'Экономика',
     studyYear: 3,
-    city: 'Москва',
+    city: 'Казань',
     workDays: ['MON', 'WED', 'FRI'],
     hoursPerWeek: 20,
     skills: ['Excel', 'SMM'],
@@ -100,19 +119,27 @@ async function main() {
     password: 'Smoke12345!',
     phone: '+7 900 111-22-33',
     consent: true,
+    terms: true,
   });
   check('регистрация', registered.status === 201, registered.body);
+
+  // HR нужен уже здесь: учёбу нового студента подтверждает он, и до этого
+  // отклики студента ждут и работодателям не уходят
+  const hr = new Session();
+  const hrLogin = await hr.post('/api/auth/login', { email: 'admin@fattakhov.ru', password: 'Admin12345!' });
+  check('HR-менеджер входит', hrLogin.status === 200, hrLogin.body);
+  const studentId = (await student.request('/api/auth/me')).body.session?.profileId as string;
 
   const weakPassword = await new Session().post('/api/auth/register', {
     fullName: 'Тест Тестов',
     gender: 'MALE',
-    birthYear: 2005,
+    birthDate: '2005-04-12',
     photoUrl: null,
-    university: 'МГУ',
+    university: 'КФУ',
     speciality: 'Экономика',
     studyYear: 3,
     city: null,
-    workDays: ['MON'],
+    workDays: ['MON', 'WED', 'FRI'],
     hoursPerWeek: 20,
     skills: [],
     about: null,
@@ -122,19 +149,20 @@ async function main() {
     password: 'короткий',
     phone: '',
     consent: true,
+    terms: true,
   });
   check('слабый пароль отвергнут', weakPassword.status === 400, weakPassword.body);
 
   const noConsent = await new Session().post('/api/auth/register', {
     fullName: 'Тест Тестов',
     gender: 'MALE',
-    birthYear: 2005,
+    birthDate: '2005-04-12',
     photoUrl: null,
-    university: 'МГУ',
+    university: 'КФУ',
     speciality: 'Экономика',
     studyYear: 3,
     city: null,
-    workDays: ['MON'],
+    workDays: ['MON', 'WED', 'FRI'],
     hoursPerWeek: 20,
     skills: [],
     about: null,
@@ -144,8 +172,10 @@ async function main() {
     password: 'Smoke12345!',
     phone: '',
     consent: false,
+    terms: false,
   });
-  check('регистрация без согласия на ПДн отвергнута', noConsent.status === 400, noConsent.body);
+  check('регистрация без согласия на ПДн отвергнута', noConsent.status === 400 && !!noConsent.body?.fields?.consent, noConsent.body);
+  check('регистрация без пользовательского соглашения отвергнута', noConsent.status === 400 && !!noConsent.body?.fields?.terms, noConsent.body);
 
   // Регистрация сама выдаёт сессию, поэтому «зарегистрировался» ещё не
   // значит «сможет войти». Ровно этот путь — выйти и войти снова — не
@@ -161,13 +191,13 @@ async function main() {
   const duplicate = await new Session().post('/api/auth/register', {
     fullName: 'Тест Дубликатов',
     gender: 'MALE',
-    birthYear: 2005,
+    birthDate: '2005-04-12',
     photoUrl: null,
-    university: 'МГУ',
+    university: 'КФУ',
     speciality: 'Экономика',
     studyYear: 3,
-    city: 'Москва',
-    workDays: ['MON'],
+    city: 'Казань',
+    workDays: ['MON', 'WED', 'FRI'],
     hoursPerWeek: 20,
     skills: [],
     about: null,
@@ -177,6 +207,7 @@ async function main() {
     password: 'Smoke12345!',
     phone: '',
     consent: true,
+    terms: true,
   });
   check('почту студента нельзя занять повторно', duplicate.status === 409, duplicate.status);
 
@@ -193,13 +224,94 @@ async function main() {
   const skippedVacancy = vacancies[1];
 
   const swipeRight = await student.post('/api/swipes', { vacancyId: liked.id, direction: 'RIGHT' });
-  check('свайп вправо создаёт отклик', swipeRight.status === 200 && swipeRight.body.applied === true, swipeRight.body);
+  check(
+    'без подтверждения учёбы отклик ждёт',
+    swipeRight.status === 200 && swipeRight.body.pending === true && swipeRight.body.applied === false,
+    swipeRight.body,
+  );
+  const waitingList = await student.request('/api/applications');
+  check(
+    'ожидающий отклик виден студенту со сроком',
+    waitingList.body.pending?.some((p: any) => p.vacancy.id === liked.id && typeof p.expiresAt === 'string'),
+    waitingList.body,
+  );
+  check('ожидающий отклик ещё не отклик', !waitingList.body.applications?.some((a: any) => a.vacancy.id === liked.id));
+
+  // Справка: студент загружает, HR возвращает с причиной, студент загружает
+  // снова, HR подтверждает — и ожидавший отклик уходит работодателю
+  const pdf = new Blob([Buffer.from('%PDF-1.4\n%smoke\n', 'utf8')], { type: 'application/pdf' });
+  const studyForm = () => {
+    const fd = new FormData();
+    fd.append('kind', 'study');
+    fd.append('file', pdf, 'spravka.pdf');
+    return fd;
+  };
+  const uploadStudy = async (who: Session) => {
+    const res = await fetch(`${BASE}/api/upload`, {
+      method: 'POST',
+      headers: { Origin: BASE, Cookie: (who as any).cookie },
+      body: studyForm(),
+    });
+    return { status: res.status, body: (await res.json().catch(() => ({}))) as { url?: string; name?: string } };
+  };
+  const guestStudy = await fetch(`${BASE}/api/upload`, { method: 'POST', headers: { Origin: BASE }, body: studyForm() });
+  check('гость не загружает справку', guestStudy.status === 401, guestStudy.status);
+  const firstDoc = await uploadStudy(student);
+  check('студент загружает справку', firstDoc.status === 201 && !!firstDoc.body.url, firstDoc);
+  const attached = await student.request('/api/students/me/study', {
+    method: 'PUT',
+    body: JSON.stringify({ url: firstDoc.body.url, name: 'spravka.pdf' }),
+  });
+  check('справка уходит на проверку', attached.status === 200 && attached.body?.study?.status === 'PENDING', attached.body);
+  const foreignDoc = await student.request('/api/students/me/study', {
+    method: 'PUT',
+    body: JSON.stringify({ url: '/api/files/photo/00000000-0000-0000-0000-000000000000.jpg', name: 'x' }),
+  });
+  check('справкой нельзя сделать чужой файл', foreignDoc.status === 400, foreignDoc.status);
+  const findStudent = async () =>
+    (((await hr.request('/api/admin/students')).body?.students ?? []) as Array<Record<string, any>>).find(
+      (s) => s.id === studentId,
+    );
+  const queuedStudent = await findStudent();
+  check(
+    'HR видит справку на проверке',
+    queuedStudent?.study === 'PENDING' && queuedStudent?.studyDocUrl === firstDoc.body.url,
+    queuedStudent,
+  );
+  if (firstDoc.body.url) check('HR открывает справку', (await hr.request(firstDoc.body.url)).status === 200);
+  check(
+    'HR не возвращает справку без причины',
+    (await hr.patch('/api/admin/students', { studentId, studyDecision: 'REJECT' })).status === 400,
+  );
+  const rejectedDoc = await hr.patch('/api/admin/students', {
+    studentId,
+    studyDecision: 'REJECT',
+    note: 'Нечитаемый скан, загрузите фото чётче',
+  });
+  check('HR возвращает справку с причиной', rejectedDoc.status === 200, rejectedDoc.body);
+  const afterReject = await student.request('/api/students/me/study');
+  check(
+    'причину отказа видит студент',
+    afterReject.body?.study?.status === 'REJECTED' && afterReject.body?.study?.note === 'Нечитаемый скан, загрузите фото чётче',
+    afterReject.body,
+  );
+  if (firstDoc.body.url) check('возвращённая справка удалена с сервера', (await hr.request(firstDoc.body.url)).status === 404);
+  const secondDoc = await uploadStudy(student);
+  await student.request('/api/students/me/study', {
+    method: 'PUT',
+    body: JSON.stringify({ url: secondDoc.body.url, name: 'spravka-2.pdf' }),
+  });
+  const approvedDoc = await hr.patch('/api/admin/students', { studentId, studyDecision: 'APPROVE' });
+  check('HR подтверждает учёбу по справке', approvedDoc.status === 200 && approvedDoc.body?.studyVerified === true, approvedDoc.body);
+  check('ожидавший отклик ушёл работодателю', approvedDoc.body?.released === 1, approvedDoc.body);
+  if (secondDoc.body.url) check('проверенная справка удалена с сервера', (await hr.request(secondDoc.body.url)).status === 404);
 
   const applications = await student.request('/api/applications');
   check(
     'отклик виден студенту',
     applications.body.applications?.some((a: any) => a.vacancy.id === liked.id),
   );
+  check('ожидающих откликов не осталось', (applications.body.pending ?? []).length === 0, applications.body.pending);
 
   await student.post('/api/swipes', { vacancyId: skippedVacancy.id, direction: 'LEFT' });
   const skipped = await student.request('/api/skipped');
@@ -469,12 +581,12 @@ async function main() {
   const ownerProfile = {
     fullName: 'Профиль Проверочный',
     gender: 'FEMALE',
-    birthYear: 2004,
+    birthDate: '2004-03-15',
     photoUrl: null,
-    university: 'МГУ',
+    university: 'КФУ',
     speciality: 'Экономика',
     studyYear: 2,
-    city: 'Москва',
+    city: 'Казань',
     workDays: ['MON', 'TUE'],
     hoursPerWeek: 16,
     skills: ['Excel'],
@@ -488,15 +600,17 @@ async function main() {
     email: ownerEmail,
     password: 'Smoke12345!',
     consent: true,
+    terms: true,
   });
   check('студент для проверки профиля заведён', ownerCreated.status === 201, ownerCreated.body);
 
   const minor = await new Session().post('/api/auth/register', {
     ...ownerProfile,
-    birthYear: new Date().getFullYear() - 17,
+    birthDate: isoYearsAgo(18, 2),
     email: `smoke-minor-${Date.now()}@demo.ru`,
     password: 'Smoke12345!',
     consent: true,
+    terms: true,
   });
   check('младше 18 регистрацию не проходит', minor.status === 400, minor.status);
 
@@ -522,6 +636,25 @@ async function main() {
 
   const invalid = await owner.patch('/api/students/me', { ...ownerProfile, studyYear: 9 });
   check('кривые данные профиля отвергнуты', invalid.status === 400, invalid.status);
+
+  // Правила даты и графика — через профиль: у регистрации лимит попыток
+  // на адрес, а схема у них одна
+  for (const [label, bad, field] of [
+    ['дата рождения без дня отвергнута', { birthDate: '2004-03' }, 'birthDate'],
+    ['несуществующая дата рождения отвергнута', { birthDate: '2004-02-30' }, 'birthDate'],
+    ['возраст младше 18 в профиле не принимается', { birthDate: isoYearsAgo(16) }, 'birthDate'],
+    ['часов больше, чем помещается в дни, — отвергнуто', { workDays: ['MON'], hoursPerWeek: 20 }, 'hoursPerWeek'],
+  ] as const) {
+    const res = await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', ...bad });
+    check(label, res.status === 400 && !!res.body?.fields?.[field], res.body);
+  }
+  const everyDay = await owner.patch('/api/students/me', {
+    ...ownerProfile,
+    fullName: 'Профиль Изменённый',
+    workDays: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+    hoursPerWeek: 40,
+  });
+  check('график «каждый день, 40 часов» сохраняется', everyDay.status === 200, everyDay.body);
 
   const portfolio = {
     lookingFor: ['JOB', 'PROJECT'],
@@ -565,11 +698,12 @@ async function main() {
 
   // ---------- Учебные заведения ----------
   const institutionsList = await new Session().request('/api/institutions');
-  const schools = (institutionsList.body?.institutions ?? []) as Array<{ id: string; slug: string }>;
+  const schools = (institutionsList.body?.institutions ?? []) as Array<{ id: string; slug: string; city: string }>;
   check('справочник вузов открыт', institutionsList.status === 200 && schools.length >= 10, schools.length);
-  check('список вузов открывается', String((await new Session().request('/institutions')).body).includes('НИУ ВШЭ'));
-  const hsePage = await new Session().request('/institutions/hse');
-  check('страница вуза открывается', hsePage.status === 200 && String(hsePage.body).includes('Высшая школа экономики'), hsePage.status);
+  check('в справочнике пилота только Казань', schools.length > 0 && schools.every((s) => s.city === 'Казань'), schools.map((s) => s.city));
+  check('список вузов открывается', String((await new Session().request('/institutions')).body).includes('КФУ'));
+  const kfuPage = await new Session().request('/institutions/kpfu');
+  check('страница вуза открывается', kfuPage.status === 200 && String(kfuPage.body).includes('Приволжский) федеральный университет'), kfuPage.status);
   check('несуществующий вуз — 404', (await new Session().request('/institutions/no-such-school')).status === 404);
 
   const ownerId = (await owner.request('/api/auth/me')).body.session?.profileId as string;
@@ -584,25 +718,25 @@ async function main() {
   });
   check('несуществующий вуз из справочника отвергнут', bogusSchool.status === 400 && !!bogusSchool.body?.fields?.university, bogusSchool.body);
 
-  const hse = schools.find((s) => s.slug === 'hse');
-  check('ВШЭ есть в справочнике', !!hse);
-  if (hse) {
+  const kfu = schools.find((s) => s.slug === 'kpfu');
+  check('КФУ есть в справочнике', !!kfu);
+  if (kfu) {
     const picked = await owner.patch('/api/students/me', {
       ...ownerProfile,
       fullName: 'Профиль Изменённый',
-      university: 'вышка',
-      institutionId: hse.id,
+      university: 'кфу',
+      institutionId: kfu.id,
     });
     check('вуз из справочника сохраняется', picked.status === 200, picked.body);
     const afterPick = await findOwner();
-    check('название вуза берётся из справочника', afterPick?.university === 'НИУ ВШЭ' && afterPick?.institutionId === hse.id, afterPick);
+    check('название вуза берётся из справочника', afterPick?.university === 'КФУ' && afterPick?.institutionId === kfu.id, afterPick);
 
     check('студент не подтверждает учёбу сам', (await owner.patch('/api/admin/students', { studentId: ownerId, studyVerified: true })).status === 401);
     check('работодатель не подтверждает учёбу', (await employer.patch('/api/admin/students', { studentId: ownerId, studyVerified: true })).status === 401);
     const verified = await admin.patch('/api/admin/students', { studentId: ownerId, studyVerified: true });
     check('HR подтверждает учёбу', verified.status === 200 && (await findOwner())?.studyVerified === true, verified.body);
 
-    await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', university: 'НИУ ВШЭ', institutionId: hse.id });
+    await owner.patch('/api/students/me', { ...ownerProfile, fullName: 'Профиль Изменённый', university: 'КФУ', institutionId: kfu.id });
     check('сохранение без смены вуза отметку не снимает', (await findOwner())?.studyVerified === true);
 
     const moved = await owner.patch('/api/students/me', {
@@ -630,16 +764,13 @@ async function main() {
     'работодатель видит отметку о подтверждении учёбы',
     typeof boardWithSchool.body?.applications?.[0]?.student?.studyVerified === 'boolean',
   );
-  check('на регистрации есть справочник вузов', String((await new Session().request('/register')).body).includes('МГТУ им. Баумана'));
-
-  // Правило 18+ — для регистрации: профиль того, кто пришёл раньше по
-  // правилу 14+, должен сохраняться
-  const earlierRule = await owner.patch('/api/students/me', {
-    ...ownerProfile,
-    fullName: 'Профиль Изменённый',
-    birthYear: new Date().getFullYear() - 16,
-  });
-  check('профиль из прежней регистрации младше 18 сохраняется', earlierRule.status === 200, earlierRule.body);
+  const boardStudent = boardWithSchool.body?.applications?.[0]?.student;
+  check(
+    'работодатель видит возраст, но не дату рождения',
+    typeof boardStudent?.age === 'number' && boardStudent?.birthDate === null,
+    boardStudent && { age: boardStudent.age, birthDate: boardStudent.birthDate },
+  );
+  check('на регистрации есть справочник вузов', String((await new Session().request('/register')).body).includes('КНИТУ'));
 
   const erased = await owner.delete('/api/students/me', {});
   check('профиль удаляется', erased.status === 200, erased.body);
@@ -654,6 +785,7 @@ async function main() {
     email: ownerEmail,
     password: 'Smoke12345!',
     consent: true,
+    terms: true,
   });
   // Почта освобождается вместе с данными: иначе удалённый человек не
   // смог бы вернуться, а его адрес так и остался бы лежать в базе
@@ -669,6 +801,7 @@ async function main() {
   // страница становится только после одобрения агентством.
   console.log('\nКомпания');
   const companyEmail = `smoke-company-${Date.now()}@demo.ru`;
+  const companyInn = randomInn();
   const companyData = {
     companyName: 'Проверочная Компания',
     contactName: 'Иван Проверкин',
@@ -676,7 +809,10 @@ async function main() {
     password: 'Smoke12345!',
     industry: 'IT',
     city: 'Казань',
+    inn: companyInn,
+    phone: '+7 900 777-66-55',
     consent: true,
+    terms: true,
   };
   const company = new Session();
   const companyReg = await company.post('/api/auth/register/company', companyData);
@@ -687,10 +823,16 @@ async function main() {
     ...companyData,
     email: `smoke-company-${Date.now() + 1}@demo.ru`,
     consent: false,
+    terms: false,
   });
   check('без согласия компанию не регистрируют', companyNoConsent.status === 400, companyNoConsent.status);
   const companyDup = await new Session().post('/api/auth/register/company', companyData);
   check('почту компании нельзя занять повторно', companyDup.status === 409, companyDup.status);
+  const innDup = await new Session().post('/api/auth/register/company', {
+    ...companyData,
+    email: `smoke-company-${Date.now() + 2}@demo.ru`,
+  });
+  check('ИНН компании нельзя занять повторно', innDup.status === 409 && !!innDup.body?.fields?.inn, innDup.body);
 
   const companyLogin = await new Session().post('/api/auth/login', { email: companyEmail, password: 'Smoke12345!' });
   check('компания входит по почте и паролю', companyLogin.status === 200 && companyLogin.body?.role === 'EMPLOYER', companyLogin.body);
@@ -700,6 +842,7 @@ async function main() {
   const companyPage = {
     companyName: 'Проверочная Компания',
     contactName: 'Иван Проверкин',
+    phone: '+7 900 777-66-55',
     logoUrl: null,
     industry: 'IT',
     about: 'Сервисы для студентов',
@@ -712,6 +855,10 @@ async function main() {
   };
   const companySaved = await company.patch('/api/employer/company', companyPage);
   check('страница компании сохраняется', companySaved.status === 200, companySaved.body);
+  const badInn = await company.patch('/api/employer/company', { ...companyPage, inn: '1234567890' });
+  check('ИНН с неверной контрольной цифрой отвергнут', badInn.status === 400 && !!badInn.body?.fields?.inn, badInn.body);
+  const phoneErased = await company.patch('/api/employer/company', { ...companyPage, phone: '' });
+  check('телефон компании нельзя стереть', phoneErased.status === 400 && !!phoneErased.body?.fields?.phone, phoneErased.body);
   check('компания на модерации не публична', (await new Session().request(`/companies/${companyId}`)).status === 404);
 
   const stolen = await company.patch('/api/employer/company', {
@@ -775,6 +922,8 @@ async function main() {
     salaryPeriod: 'MONTH',
     city: 'Казань',
     district: null,
+    address: 'ул. Баумана, 44',
+    addressDetails: 'офис 5',
     workFormat: 'HYBRID',
     employmentType: 'INTERNSHIP',
     shiftDays: ['MON', 'WED', 'FRI'],
@@ -803,6 +952,10 @@ async function main() {
   check('фото вакансии — только файлы компании', foreignPhoto.status === 400, foreignPhoto.status);
   const noDays = await company.post('/api/employer/vacancies', { ...vacancyForm, shiftDays: [] });
   check('вакансия без дней смен отвергнута', noDays.status === 400, noDays.status);
+  const noAddress = await company.post('/api/employer/vacancies', { ...vacancyForm, address: null });
+  check('вакансия на месте без адреса отвергнута', noAddress.status === 400 && !!noAddress.body?.fields?.address, noAddress.body);
+  const remoteDraft = await company.post('/api/employer/vacancies', { ...vacancyForm, workFormat: 'REMOTE', address: null, addressDetails: null });
+  check('удалённая вакансия сохраняется без адреса', remoteDraft.status === 201, remoteDraft.body);
 
   check('раздел вакансий открывается', (await company.request('/employer/vacancies')).status === 200);
   check('форма новой вакансии открывается', (await company.request('/employer/vacancies/new')).status === 200);
@@ -845,6 +998,14 @@ async function main() {
   check(
     'вакансия в очереди модерации',
     ((queue.body?.vacancies ?? []) as Array<{ vacancy: { id: string } }>).some((v) => v.vacancy.id === vacancyId),
+  );
+  const queuedCompany = ((queue.body?.companies ?? []) as Array<{ id: string; inn: string | null; phone: string | null }>).find(
+    (c) => c.id === companyId,
+  );
+  check(
+    'в очереди у компании ИНН и телефон для проверки',
+    queuedCompany?.inn === companyInn && queuedCompany?.phone === '+7 900 777-66-55',
+    queuedCompany,
   );
   check('страница модерации открывается', (await admin.request('/admin/moderation')).status === 200);
   const statsBody = (await admin.request('/api/admin/stats')).body;
@@ -894,6 +1055,13 @@ async function main() {
   const companyApproved = await admin.post('/api/admin/moderation', { entity: 'company', id: companyId, decision: 'APPROVE' });
   check('компания одобряется', companyApproved.status === 200 && companyApproved.body?.status === 'APPROVED', companyApproved.body);
   check('одобренная компания открыта гостю', (await new Session().request(`/companies/${companyId}`)).status === 200);
+  const innLocked = await company.patch('/api/employer/company', { ...companyPage, inn: randomInn() });
+  const lockedPage = String((await company.request('/employer/company')).body);
+  check(
+    'ИНН одобренной компании из кабинета не меняется',
+    innLocked.status === 200 && innLocked.body?.moderationStatus === 'APPROVED' && lockedPage.includes(companyInn),
+    innLocked.body,
+  );
   const vacancyApproved = await admin.post('/api/admin/moderation', { entity: 'vacancy', id: vacancyId, decision: 'APPROVE' });
   check('вакансия одобряется', vacancyApproved.status === 200 && vacancyApproved.body?.status === 'PUBLISHED', vacancyApproved.body);
   check('одобренная вакансия в ленте', await inFeed());
@@ -914,6 +1082,7 @@ async function main() {
     feedCard?.learnings?.[0] === 'SQL на реальных данных' && feedCard?.team === 'Аналитик-наставник и два стажёра',
     feedCard,
   );
+  check('в карточке вакансии адрес', feedCard?.address === 'ул. Баумана, 44' && feedCard?.addressDetails === 'офис 5', feedCard);
   const publicCompany = await new Session().request(`/companies/${companyId}`);
   check('вакансия видна на странице компании', String(publicCompany.body).includes('Стажёр-аналитик'), publicCompany.status);
 

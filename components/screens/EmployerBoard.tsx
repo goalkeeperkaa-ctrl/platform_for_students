@@ -265,7 +265,7 @@ function CandidateRow({
   onStatus: (status: ApplicationStatus) => void;
 }) {
   const { student } = application;
-  const age = new Date().getFullYear() - student.birthYear;
+  const age = student.age;
 
   return (
     <motion.article layout transition={springSoft} className="surface min-w-0 overflow-hidden rounded-3xl">

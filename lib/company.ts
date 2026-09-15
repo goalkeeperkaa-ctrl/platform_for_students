@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { httpUrlSchema, linkItemSchema } from '@/lib/portfolio';
-import { emailSchema, passwordSchema } from '@/lib/validation';
+import { isValidInn, normalizeInn } from '@/lib/inn';
+import { consentFields, emailSchema, passwordSchema, phoneSchema, requiredPhoneSchema } from '@/lib/validation';
 import type { CompanyProfile, LinkItem } from '@/lib/types';
 
 /**
@@ -44,6 +45,21 @@ const contactName = z
   .max(120, 'Не длиннее 120 символов')
   .regex(/^[А-Яа-яЁёA-Za-z\s'-]+$/, 'Только буквы, пробел и дефис');
 
+/** ИНН: только цифры, 10 или 12, с верными контрольными цифрами. */
+export const innSchema = z
+  .string({ invalid_type_error: 'Укажите ИНН' })
+  .transform(normalizeInn)
+  .superRefine((value, ctx) => {
+    if (value.length !== 10 && value.length !== 12) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: value ? 'ИНН — 10 цифр у организации или 12 у ИП' : 'Укажите ИНН',
+      });
+    } else if (!isValidInn(value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Проверьте ИНН: контрольные цифры не сходятся' });
+    }
+  });
+
 export const companyProfileSchema = z.object({
   companyName,
   contactName,
@@ -56,6 +72,10 @@ export const companyProfileSchema = z.object({
   socials: z.array(linkItemSchema).max(8, 'Не больше 8 ссылок'),
   photos: z.array(companyFileUrlSchema).max(6, 'Не больше 6 фото'),
   videoUrl: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
+  // Телефон и ИНН — не для страницы, а для проверки агентством. Правило
+  // «ИНН проверенной компании не меняется» — в роуте: схема не знает статус
+  phone: phoneSchema,
+  inn: innSchema.optional(),
 });
 
 export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
@@ -67,9 +87,9 @@ export const companyRegistrationSchema = z.object({
   password: passwordSchema,
   industry: optionalText(80),
   city: optionalText(80),
-  consent: z.literal(true, {
-    errorMap: () => ({ message: 'Без согласия на обработку данных регистрация невозможна' }),
-  }),
+  inn: innSchema,
+  phone: requiredPhoneSchema,
+  ...consentFields(),
 });
 
 export type CompanyRegistrationInput = z.infer<typeof companyRegistrationSchema>;
@@ -129,4 +149,18 @@ export function readCompanyProfile(row: {
 }
 
 /** Версия согласия контактного лица компании на обработку ПДн. */
-export const COMPANY_CONSENT_VERSION = '2026-09-13';
+export { COMPANY_CONSENT_VERSION } from '@/lib/legal';
+
+/**
+ * Почта на публичном сервисе, а не на домене компании. Не отказ — у малого
+ * бизнеса часто gmail, — а повод для HR присмотреться внимательнее.
+ */
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'mail.ru', 'bk.ru', 'list.ru', 'inbox.ru', 'internet.ru', 'yandex.ru', 'ya.ru',
+  'yandex.com', 'rambler.ru', 'icloud.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'proton.me',
+]);
+
+export function isFreeEmail(email: string): boolean {
+  const domain = email.split('@')[1]?.trim().toLowerCase();
+  return !!domain && FREE_EMAIL_DOMAINS.has(domain);
+}

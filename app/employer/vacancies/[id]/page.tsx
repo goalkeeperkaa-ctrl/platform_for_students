@@ -7,7 +7,7 @@ import { VacancyEditor } from '@/components/screens/VacancyEditor';
 import { countUnread } from '@/lib/chat';
 import { employerNav } from '@/lib/employer-nav';
 import { requireEmployerPage } from '@/lib/security/guards';
-import { buildEmployerBoard, getEmployerVacancy } from '@/lib/services';
+import { buildEmployerBoard, getEmployerVacancy, listEmployerAddresses } from '@/lib/services';
 import { vacancyToForm } from '@/lib/vacancy';
 
 export const metadata: Metadata = { title: 'Вакансия' };
@@ -21,9 +21,10 @@ export default async function EditVacancyPage({ params }: Props) {
   const vacancy = await getEmployerVacancy(employer.id, params.id);
   if (!vacancy) notFound();
 
-  const [board, unread] = await Promise.all([
+  const [board, unread, addresses] = await Promise.all([
     buildEmployerBoard(employer.id),
     countUnread({ role: 'EMPLOYER', profileId: employer.id }),
+    listEmployerAddresses(employer.id),
   ]);
 
   return (
@@ -55,6 +56,7 @@ export default async function EditVacancyPage({ params }: Props) {
           moderationNote={vacancy.status === 'REJECTED' ? vacancy.moderationNote : null}
           initial={vacancyToForm(vacancy)}
           companyStatus={employer.moderationStatus}
+          knownAddresses={addresses.filter((a) => a.address !== vacancy.address || a.city !== vacancy.city)}
         />
       )}
     </AppShell>

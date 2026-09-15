@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
-import { handle, ok } from '@/lib/api';
+import { fail, handle, ok } from '@/lib/api';
 import { companyProfileSchema } from '@/lib/company';
+import { isInnExistsError } from '@/lib/db';
+import type { EmployerRecord } from '@/lib/db/types';
 import { assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
 import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
 import type { SessionUser } from '@/lib/types';
@@ -23,7 +25,30 @@ export async function PATCH(request: Request) {
     const { session, employer, store } = await requireEmployer();
 
     const input = companyProfileSchema.parse(await request.json());
-    let updated = await store.employers.updateProfile(employer.id, input);
+
+    // Телефон — то, по чему агентство подтверждает компанию, зарегистрированную
+    // самой: стереть его значит оставить HR без способа связаться
+    if (!employer.crmClientId && !input.phone) {
+      return fail(400, 'Укажите телефон для связи', 'VALIDATION', {
+        phone: 'Укажите телефон — по нему агентство подтверждает компанию',
+      });
+    }
+    // ИНН проверенной компании меняет только агентство: иначе одобренная
+    // компания подменила бы реквизиты без проверки. У клиентов из CRM
+    // реквизиты в CRM
+    const inn = employer.moderationStatus === 'APPROVED' || employer.crmClientId ? undefined : input.inn;
+
+    let updated: EmployerRecord;
+    try {
+      updated = await store.employers.updateProfile(employer.id, { ...input, inn });
+    } catch (err) {
+      if (isInnExistsError(err)) {
+        return fail(409, 'Компания с таким ИНН уже зарегистрирована', 'INN_TAKEN', {
+          inn: 'Компания с таким ИНН уже есть на платформе',
+        });
+      }
+      throw err;
+    }
 
     // Компания, зарегистрированная сама, после смены названия проходит
     // проверку снова: иначе одобрение одной вывески превращалось бы в

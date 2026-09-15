@@ -7,11 +7,11 @@ import { UPLOAD_LIMITS, type UploadKind } from '@/lib/validation';
 export const runtime = 'nodejs';
 
 /**
- * Приём фото и резюме.
+ * Приём фото, резюме, изображений компании и справок об обучении.
  *
- * Сессии здесь может не быть: фото и резюме прикладываются на шагах
- * мастера, до создания аккаунта. Поэтому единственный барьер — лимит по
- * IP, а сам файл проверяется по типу и размеру до записи на диск.
+ * Сессии для фото и резюме может не быть: их прикладывают на шагах мастера,
+ * до создания аккаунта. Поэтому для них единственный барьер — лимит по IP, а
+ * сам файл проверяется по типу и размеру до записи на диск.
  */
 export async function POST(request: Request) {
   return handle(async () => {
@@ -34,6 +34,14 @@ export async function POST(request: Request) {
       const session = await getSession();
       if (!session || session.role !== 'EMPLOYER') {
         return fail(401, 'Загружать изображения компании может только её кабинет', 'UNAUTHORIZED');
+      }
+    }
+    // Справку прикладывает студент из профиля: она привязывается к учётной
+    // записи, и без входа ей не к чему привязаться
+    if (kind === 'study') {
+      const session = await getSession();
+      if (!session || session.role !== 'STUDENT') {
+        return fail(401, 'Справку загружает студент из своего профиля', 'UNAUTHORIZED');
       }
     }
     if (!(file instanceof File)) {

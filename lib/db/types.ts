@@ -31,6 +31,9 @@ export interface AccountRecord {
   passwordHash: string | null;
   isActive: boolean;
   lastLoginAt: Date | null;
+  termsVersion: string | null;
+  termsAcceptedAt: Date | null;
+  marketingConsentAt: Date | null;
   createdAt: Date;
 }
 
@@ -41,6 +44,8 @@ export interface StudentRecord extends StudentPortfolio {
   phoneEnc: string | null;
   gender: Gender;
   birthYear: number;
+  /** «ГГГГ-ММ-ДД», зашифрована. null — анкета заведена до полной даты */
+  birthDateEnc: string | null;
   photoUrl: string | null;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -50,6 +55,12 @@ export interface StudentRecord extends StudentPortfolio {
   institutionId: string | null;
   studyVerified: boolean;
   studyVerifiedAt: Date | null;
+  /** Справка на проверке у HR; null — не загружена или уже проверена */
+  studyDocUrl: string | null;
+  studyDocName: string | null;
+  studyDocAt: Date | null;
+  /** Причина, по которой HR вернул справку */
+  studyReviewNote: string | null;
   city: string | null;
   workDays: Weekday[];
   hoursPerWeek: number | null;
@@ -81,6 +92,10 @@ export interface EmployerRecord {
   accountId: string;
   companyName: string;
   contactName: string;
+  /** Телефон контактного лица, зашифрован */
+  phoneEnc: string | null;
+  /** ИНН; пуст у клиентов из CRM */
+  inn: string | null;
   logoUrl: string | null;
   crmClientId: string | null;
   industry: string | null;
@@ -119,6 +134,8 @@ export interface VacancyRecord {
   salaryPeriod: SalaryPeriod;
   city: string;
   district: string | null;
+  address: string | null;
+  addressDetails: string | null;
   workFormat: WorkFormat;
   employmentType: EmploymentType;
   shiftDays: Weekday[];
@@ -233,6 +250,8 @@ export interface StudentProfileUpdate extends Partial<StudentPortfolio> {
   phone: string | null;
   gender: Gender;
   birthYear: number;
+  /** «ГГГГ-ММ-ДД» открытым текстом — хранилище шифрует */
+  birthDate: string;
   photoUrl: string | null;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -256,6 +275,8 @@ export interface NewStudentInput {
   phone: string | null;
   gender: Gender;
   birthYear: number;
+  /** «ГГГГ-ММ-ДД» открытым текстом — хранилище шифрует */
+  birthDate: string;
   photoUrl: string | null;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -271,6 +292,8 @@ export interface NewStudentInput {
   institutionId: string | null;
   consentVersion: string;
   consentIp: string | null;
+  termsVersion: string;
+  marketingConsent: boolean;
 }
 
 /**
@@ -287,7 +310,12 @@ export interface NewEmployerInput {
   contactName: string;
   industry: string | null;
   city: string | null;
+  inn: string;
+  /** Открытым текстом — хранилище шифрует */
+  phone: string;
   consentVersion: string;
+  termsVersion: string;
+  marketingConsent: boolean;
 }
 
 /** Страница компании: всё, что компания меняет о себе сама. */
@@ -303,6 +331,10 @@ export interface CompanyProfileUpdate {
   socials: LinkItem[];
   photos: string[];
   videoUrl: string | null;
+  /** Телефон контактного лица открытым текстом; undefined — не менять */
+  phone?: string | null;
+  /** ИНН; undefined — не менять */
+  inn?: string;
 }
 
 /**
@@ -323,6 +355,8 @@ export type VacancyContent = Pick<
   | 'salaryPeriod'
   | 'city'
   | 'district'
+  | 'address'
+  | 'addressDetails'
   | 'workFormat'
   | 'employmentType'
   | 'shiftDays'
@@ -364,6 +398,8 @@ export interface CrmVacancyInput {
   salaryPeriod: SalaryPeriod;
   city: string;
   district: string | null;
+  address: string | null;
+  addressDetails: string | null;
   workFormat: WorkFormat;
   employmentType: EmploymentType;
   shiftDays: Weekday[];
@@ -402,6 +438,10 @@ export interface DataStore {
     setStatus(id: string, status: StudentStatus): Promise<void>;
     /** Отметка HR «учёба подтверждена». null — студента нет. */
     setStudyVerified(id: string, verified: boolean): Promise<StudentRecord | null>;
+    /** Справка на проверку; null — отозвать. Новая справка снимает причину прошлого отказа. */
+    setStudyDocument(id: string, doc: { url: string; name: string } | null): Promise<StudentRecord | null>;
+    /** HR вернул справку: файл снимается, причина остаётся студенту. */
+    rejectStudy(id: string, note: string): Promise<StudentRecord | null>;
     update(id: string, input: StudentProfileUpdate): Promise<StudentRecord>;
     /**
      * Удаление по требованию человека (152-ФЗ, право на отзыв согласия).

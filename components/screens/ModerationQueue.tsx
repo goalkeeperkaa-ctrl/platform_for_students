@@ -221,6 +221,39 @@ function CompanyCard({
             </dd>
           </div>
         )}
+        <div className="flex flex-wrap gap-x-2">
+          <dt className="text-paper-faint">ИНН:</dt>
+          <dd className="min-w-0 break-words text-paper-dim">
+            {company.inn ? (
+              <>
+                <span className="tabular-nums text-paper">{company.inn}</span>{' '}
+                <a
+                  href="https://egrul.nalog.ru/index.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-200 underline-offset-4 hover:underline"
+                >
+                  проверить в ФНС
+                </a>
+              </>
+            ) : (
+              'не указан'
+            )}
+          </dd>
+        </div>
+        {company.phone && (
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-paper-faint">Телефон:</dt>
+            <dd className="min-w-0">
+              <a
+                href={'tel:' + company.phone.replace(/[^\d+]/g, '')}
+                className="break-all text-paper underline-offset-4 hover:underline"
+              >
+                {company.phone}
+              </a>
+            </dd>
+          </div>
+        )}
         {website && (
           <div className="flex flex-wrap gap-x-2">
             <dt className="text-paper-faint">Сайт:</dt>
@@ -237,6 +270,17 @@ function CompanyCard({
           </div>
         )}
       </dl>
+
+      {(company.freeEmail || !company.inn) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {company.freeEmail && <Tag tone="hot">Почта не на домене компании</Tag>}
+          {!company.inn && <Tag tone="hot">Нет ИНН</Tag>}
+        </div>
+      )}
+      <p className="mt-3 text-[12.5px] leading-relaxed text-paper-faint">
+        Сверьте ИНН на сайте ФНС: компания действующая, название совпадает. Если о компании ничего
+        не нашлось — позвоните по телефону.
+      </p>
 
       {company.about ? (
         <p className="mt-4 line-clamp-4 whitespace-pre-line break-words text-[14px] leading-relaxed text-paper-dim">

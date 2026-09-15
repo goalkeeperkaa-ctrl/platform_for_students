@@ -1,13 +1,14 @@
 import { fail, handle, ok } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
-import { listAdminStudents } from '@/lib/services';
+import { listAdminStudents, releasePendingApplications } from '@/lib/services';
+import { deleteStored } from '@/lib/storage';
 import { adminStudentUpdateSchema } from '@/lib/validation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Все студенты для HR — с вузом, статусом и отметкой о подтверждении учёбы. */
+/** Все студенты для HR — с вузом, статусом, справкой и отметкой о подтверждении учёбы. */
 export async function GET() {
   return handle(async () => {
     await requireRole('ADMIN');
@@ -16,16 +17,22 @@ export async function GET() {
 }
 
 /**
- * HR меняет студента: статус (пауза, возврат в поиск) и отметку «учёба
- * подтверждена» — после проверки студенческого или справки. Каждое
- * изменение — отдельная запись в журнале: подтверждение учёбы работодатель
- * видит как факт, и должно быть видно, кто его поставил.
+ * HR меняет студента: статус (пауза, возврат в поиск), подтверждение учёбы
+ * и решение по справке.
+ *
+ * Подтверждение учёбы отправляет работодателям отклики, которые ждали его.
+ * Файл справки после решения удаляется: он был нужен только для проверки, а
+ * хранить ПДн дольше нужного незачем. Каждое изменение — отдельная запись в
+ * журнале: подтверждение учёбы работодатель видит как факт, и должно быть
+ * видно, кто его поставил.
  */
 export async function PATCH(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
     const session = await requireRole('ADMIN');
-    const { studentId, status, studyVerified } = adminStudentUpdateSchema.parse(await request.json());
+    const { studentId, status, studyVerified, studyDecision, note } = adminStudentUpdateSchema.parse(
+      await request.json(),
+    );
 
     const store = await getStore();
     const student = await store.students.findById(studentId);
@@ -40,23 +47,46 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (studyVerified !== undefined) {
-      await store.students.setStudyVerified(studentId, studyVerified);
+    if (studyDecision === 'REJECT') {
+      if (!student.studyDocUrl) return fail(409, 'Справки на проверке нет', 'NO_DOCUMENT');
+      await store.students.rejectStudy(studentId, note ?? '');
+      await deleteStored(student.studyDocUrl);
+      await audit(session, { action: 'student.study.rejected', entity: 'Student', entityId: studentId }, request.headers);
+    }
+
+    let released = 0;
+    const verify = studyDecision === 'APPROVE' ? true : studyVerified;
+    if (verify !== undefined) {
+      await store.students.setStudyVerified(studentId, verify);
+      if (verify && student.studyDocUrl) await deleteStored(student.studyDocUrl);
       await audit(
         session,
         {
-          action: studyVerified ? 'student.study.verified' : 'student.study.unverified',
+          action: verify ? 'student.study.verified' : 'student.study.unverified',
           entity: 'Student',
           entityId: studentId,
+          meta: { byDocument: studyDecision === 'APPROVE' },
         },
         request.headers,
       );
+      if (verify) {
+        released = await releasePendingApplications(studentId);
+        if (released > 0) {
+          await audit(
+            session,
+            { action: 'application.released', entity: 'Student', entityId: studentId, meta: { count: released } },
+            request.headers,
+          );
+        }
+      }
     }
 
+    const fresh = await store.students.findById(studentId);
     return ok({
       studentId,
-      status: status ?? student.status,
-      studyVerified: studyVerified ?? student.studyVerified,
+      status: fresh?.status ?? student.status,
+      studyVerified: fresh?.studyVerified ?? student.studyVerified,
+      released,
     });
   });
 }

@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { UPLOAD_LIMITS, type UploadKind } from '@/lib/validation';
 import { HttpError } from '@/lib/security/guards';
@@ -96,4 +96,21 @@ export async function readStored(kind: string, name: string): Promise<{ body: Bu
 function sanitizeDisplayName(name: string): string {
   const cleaned = name.replace(/[^\p{L}\p{N} ._()-]/gu, '').trim();
   return cleaned.slice(0, 120) || 'Файл';
+}
+
+/**
+ * Удалить загруженный файл по его адресу. Отсутствующий файл — не ошибка:
+ * результат тот же, что и просили. Путь сверяется с тем же белым списком,
+ * что и при чтении, — удалить что-то вне каталога загрузок нельзя.
+ */
+export async function deleteStored(url: string): Promise<void> {
+  const match = /^\/api\/files\/([a-z]+)\/([^/]+)$/.exec(url);
+  if (!match) return;
+  const [, kind, name] = match;
+  if (!Object.prototype.hasOwnProperty.call(UPLOAD_LIMITS, kind) || !NAME_PATTERN.test(name)) return;
+  const full = path.join(ROOT, kind, name);
+  if (!full.startsWith(ROOT + path.sep)) return;
+  await unlink(full).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') throw error;
+  });
 }

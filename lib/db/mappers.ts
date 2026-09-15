@@ -1,5 +1,6 @@
 import 'server-only';
 import { decryptSafe } from '@/lib/security/crypto';
+import { ageFromIso, todayInMoscow } from '@/lib/age';
 import { plural } from '@/lib/utils';
 import { WEEKDAY_LABEL, type VacancyDTO, type StudentProfileDTO } from '@/lib/types';
 import type { StudentRecord, VacancyRecord, EmployerRecord } from './types';
@@ -113,6 +114,8 @@ export function toVacancyDTO(
     salaryPeriod: vacancy.salaryPeriod,
     city: vacancy.city,
     district: vacancy.district,
+    address: vacancy.address,
+    addressDetails: vacancy.addressDetails,
     workFormat: vacancy.workFormat,
     employmentType: vacancy.employmentType,
     shiftDays: vacancy.shiftDays,
@@ -135,7 +138,7 @@ export function toVacancyDTO(
 export function toStudentDTO(
   student: StudentRecord,
   email: string,
-  options: { includeContacts: boolean } = { includeContacts: true },
+  options: { includeContacts: boolean; includeBirthDate?: boolean } = { includeContacts: true },
 ): StudentProfileDTO {
   return {
     id: student.id,
@@ -143,7 +146,9 @@ export function toStudentDTO(
     email: options.includeContacts ? email : '',
     phone: options.includeContacts ? decryptSafe(student.phoneEnc, '') || null : null,
     gender: student.gender,
-    birthYear: student.birthYear,
+    age: studentAge(student),
+    // Дату целиком видит только сам студент: работодателю хватает возраста
+    birthDate: options.includeBirthDate ? decryptSafe(student.birthDateEnc, '') || null : null,
     photoUrl: student.photoUrl,
     resumeUrl: student.resumeUrl,
     resumeName: student.resumeName,
@@ -168,6 +173,12 @@ export function toStudentDTO(
     status: student.status,
     createdAt: student.createdAt.toISOString(),
   };
+}
+
+/** Полных лет: по дате рождения, у анкет без неё — по году. */
+export function studentAge(student: Pick<StudentRecord, 'birthDateEnc' | 'birthYear'>): number {
+  const date = student.birthDateEnc ? decryptSafe(student.birthDateEnc, '') : '';
+  return (date ? ageFromIso(date) : null) ?? todayInMoscow().year - student.birthYear;
 }
 
 /** Только имя — для журналов и статистики, где остальные ПДн не нужны. */

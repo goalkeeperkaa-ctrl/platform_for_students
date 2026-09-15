@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COMPANY_FILE_PATTERN, companyFileUrlSchema } from '@/lib/company';
+import { PILOT_CITY } from '@/lib/pilot';
 import { httpUrlSchema } from '@/lib/portfolio';
 import {
   EMPLOYMENT_TYPES,
@@ -56,7 +57,7 @@ const money = z
   .max(10_000_000, 'Слишком большая сумма')
   .nullable();
 
-export const vacancyInputSchema = z
+const vacancyObject = z
   .object({
     title: z.string().trim().min(3, 'Укажите должность').max(120, 'Не длиннее 120 символов'),
     summary: z
@@ -74,6 +75,8 @@ export const vacancyInputSchema = z
     salaryPeriod: z.enum(SALARY_PERIODS),
     city: z.string().trim().min(2, 'Укажите город').max(80, 'Не длиннее 80 символов'),
     district: optionalText(80),
+    address: optionalText(160),
+    addressDetails: optionalText(120),
     workFormat: z.enum(WORK_FORMATS),
     employmentType: z.enum(EMPLOYMENT_TYPES),
     shiftDays: z
@@ -98,12 +101,17 @@ export const vacancyInputSchema = z
       .max(VACANCY_LIMITS.photos, `Не больше ${VACANCY_LIMITS.photos} фото`)
       .transform((photos) => Array.from(new Set(photos))),
     videoUrl: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
-  })
-  .superRefine((v, ctx) => {
-    if (v.salaryFrom !== null && v.salaryTo !== null && v.salaryTo < v.salaryFrom) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['salaryTo'], message: '«До» меньше, чем «от»' });
-    }
   });
+
+export const vacancyInputSchema = vacancyObject.superRefine((v, ctx) => {
+  if (v.salaryFrom !== null && v.salaryTo !== null && v.salaryTo < v.salaryFrom) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['salaryTo'], message: '«До» меньше, чем «от»' });
+  }
+  // Куда ехать — первый вопрос студента к вакансии. Удалённой адрес не нужен
+  if (v.workFormat !== 'REMOTE' && (!v.address || v.address.length < 5)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['address'], message: 'Укажите улицу и дом, где предстоит работать' });
+  }
+});
 
 export type VacancyInput = z.infer<typeof vacancyInputSchema>;
 
@@ -187,6 +195,8 @@ const CONTENT_KEYS = [
   'salaryPeriod',
   'city',
   'district',
+  'address',
+  'addressDetails',
   'workFormat',
   'employmentType',
   'shiftDays',
@@ -207,7 +217,9 @@ export function vacancyContentOf(vacancy: VacancyInput): VacancyInput {
  */
 export function readApprovedContent(value: unknown): VacancyInput | null {
   if (!value || typeof value !== 'object') return null;
-  const parsed = vacancyInputSchema.safeParse(value);
+  // Снимок, одобренный до появления адреса, адреса не содержит — это не
+  // повод его терять: читаем без правила «адрес обязателен»
+  const parsed = vacancyObject.safeParse({ address: null, addressDetails: null, ...(value as object) });
   return parsed.success ? parsed.data : null;
 }
 
@@ -241,6 +253,8 @@ export interface VacancyFormState {
   salaryPeriod: SalaryPeriod;
   city: string;
   district: string;
+  address: string;
+  addressDetails: string;
   workFormat: WorkFormat;
   employmentType: EmploymentType;
   shiftDays: Weekday[];
@@ -261,8 +275,10 @@ export const EMPTY_VACANCY_FORM: VacancyFormState = {
   salaryFrom: '',
   salaryTo: '',
   salaryPeriod: 'MONTH',
-  city: '',
+  city: PILOT_CITY,
   district: '',
+  address: '',
+  addressDetails: '',
   workFormat: 'ONSITE',
   employmentType: 'PART_TIME',
   shiftDays: [],
@@ -287,6 +303,8 @@ export function vacancyToForm(v: VacancyInput): VacancyFormState {
     salaryPeriod: v.salaryPeriod,
     city: v.city,
     district: v.district ?? '',
+    address: v.address ?? '',
+    addressDetails: v.addressDetails ?? '',
     workFormat: v.workFormat,
     employmentType: v.employmentType,
     shiftDays: [...v.shiftDays],
@@ -319,6 +337,8 @@ export function formToVacancyPayload(form: VacancyFormState) {
     salaryPeriod: form.salaryPeriod,
     city: form.city,
     district: form.district.trim() ? form.district : null,
+    address: form.address.trim() ? form.address : null,
+    addressDetails: form.addressDetails.trim() ? form.addressDetails : null,
     workFormat: form.workFormat,
     employmentType: form.employmentType,
     shiftDays: form.shiftDays,
@@ -327,4 +347,17 @@ export function formToVacancyPayload(form: VacancyFormState) {
     photos: form.photos,
     videoUrl: form.videoUrl.trim() ? form.videoUrl : null,
   };
+}
+
+/** Адрес, где компания уже нанимала, — чтобы сеть точек не вписывала его заново. */
+export interface CompanyAddress {
+  city: string;
+  district: string | null;
+  address: string;
+  addressDetails: string | null;
+}
+
+/** Ссылка на Яндекс Карты по адресу — без ключа и платного API. */
+export function mapUrl(city: string, address: string): string {
+  return `https://yandex.ru/maps/?text=${encodeURIComponent(`${city}, ${address}`)}`;
 }

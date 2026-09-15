@@ -1,3 +1,5 @@
+import type { StudyStatus } from '@/lib/study';
+
 /**
  * Доменные типы платформы.
  *
@@ -243,6 +245,10 @@ export interface VacancyDTO {
   salaryPeriod: 'MONTH' | 'SHIFT' | 'HOUR';
   city: string;
   district: string | null;
+  /** Улица и дом; null у удалённой вакансии */
+  address: string | null;
+  /** Офис, этаж, вход */
+  addressDetails: string | null;
   workFormat: WorkFormat;
   employmentType: EmploymentType;
   shiftDays: Weekday[];
@@ -261,7 +267,10 @@ export interface StudentProfileDTO extends StudentPortfolio {
   email: string;
   phone: string | null;
   gender: Gender;
-  birthYear: number;
+  /** Полных лет */
+  age: number;
+  /** «ГГГГ-ММ-ДД» — только самому студенту, остальным null */
+  birthDate: string | null;
   photoUrl: string | null;
   resumeUrl: string | null;
   resumeName: string | null;
@@ -366,6 +375,12 @@ export interface ModerationCompanyDTO {
   companyName: string;
   contactName: string;
   email: string;
+  /** ИНН для сверки с госреестром; пуст у клиентов из CRM */
+  inn: string | null;
+  /** Телефон контактного лица — позвонить, если в открытых источниках пусто */
+  phone: string | null;
+  /** Почта на публичном сервисе, а не на домене компании */
+  freeEmail: boolean;
   logoUrl: string | null;
   industry: string | null;
   city: string | null;
@@ -451,6 +466,12 @@ export interface AdminStudentDTO {
   city: string | null;
   status: StudentStatus;
   studyVerified: boolean;
+  /** Подтверждена, справка на проверке, возвращена или ничего нет */
+  study: StudyStatus;
+  studyDocUrl: string | null;
+  studyDocName: string | null;
+  studyDocAt: string | null;
+  studyReviewNote: string | null;
   applications: number;
   createdAt: string;
 }
@@ -519,3 +540,28 @@ export interface ThreadDTO extends ThreadSummaryDTO {
 
 /** Максимальная длина сообщения. Длиннее — это уже письмо, а не реплика. */
 export const MESSAGE_MAX_LENGTH = 2000;
+
+// ============ ПОДТВЕРЖДЕНИЕ УЧЁБЫ ============
+
+export type { StudyStatus };
+
+/** Состояние подтверждения учёбы — для профиля, ленты и откликов студента. */
+export interface StudyStateDTO {
+  status: StudyStatus;
+  docName: string | null;
+  docAt: string | null;
+  /** Причина, по которой HR вернул справку */
+  note: string | null;
+  /** Срок загрузки справки — четыре рабочих дня от регистрации */
+  deadline: string;
+  workdaysLeft: number;
+  deadlinePassed: boolean;
+}
+
+/** Отклик, который ждёт подтверждения учёбы: свайп вправо без отклика. */
+export interface PendingApplicationDTO {
+  vacancy: VacancyDTO;
+  swipedAt: string;
+  /** Когда удалится, если учёбу не подтвердят */
+  expiresAt: string;
+}
