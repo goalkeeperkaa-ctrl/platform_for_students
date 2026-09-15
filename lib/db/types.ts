@@ -34,6 +34,7 @@ export interface AccountRecord {
   termsVersion: string | null;
   termsAcceptedAt: Date | null;
   marketingConsentAt: Date | null;
+  tourSeenAt: Date | null;
   createdAt: Date;
 }
 
@@ -428,6 +429,8 @@ export interface DataStore {
     findByEmailHash(emailHash: string): Promise<AccountRecord | null>;
     findById(id: string): Promise<AccountRecord | null>;
     touchLogin(id: string): Promise<void>;
+    /** Инструкция по кабинету пройдена или закрыта */
+    markTourSeen(id: string): Promise<void>;
   };
 
   students: {

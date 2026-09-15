@@ -66,6 +66,7 @@ function StudyBanner({ study }: { study: StudyStateDTO }) {
   return (
     <Link
       href="/profile#study"
+      data-tour="study"
       className={cn(
         'mt-3 block w-full max-w-[26rem] rounded-2xl border px-4 py-3 text-[13px] leading-snug transition-colors',
         warn

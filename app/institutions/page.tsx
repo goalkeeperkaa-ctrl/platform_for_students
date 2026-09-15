@@ -18,8 +18,8 @@ export const dynamic = 'force-dynamic';
  * Справочник учебных заведений.
  *
  * По городам: студент ищет свой вуз там, где учится, а работодатель
- * смотрит, из каких вузов рядом приходят кандидаты. Сколько студентов от
- * каждого вуза — здесь не показывается: это видит только агентство.
+ * смотрит, из каких вузов рядом приходят кандидаты. Цифры по вузам — на
+ * странице рейтинга и только от пяти студентов с подтверждённой учёбой.
  */
 export default async function InstitutionsPage() {
   const institutions = await listInstitutionsPublic();
@@ -30,11 +30,16 @@ export default async function InstitutionsPage() {
     <div className="min-h-dvh">
       <header className="page-x mx-auto flex h-[var(--header-h)] max-w-3xl items-center justify-between gap-4">
         <Logo href="/" />
-        <Link href="/register">
-          <Button variant="accent" size="sm">
-            Регистрация
-          </Button>
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/institutions/rating" className="text-[13px] text-paper-faint transition-colors hover:text-paper">
+            Рейтинг
+          </Link>
+          <Link href="/register">
+            <Button variant="accent" size="sm">
+              Регистрация
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <main className="page-x mx-auto max-w-3xl pb-24 pt-4">

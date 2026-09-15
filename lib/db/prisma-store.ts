@@ -78,6 +78,9 @@ export function createPrismaStore(): DataStore {
       async touchLogin(id) {
         await prisma.account.update({ where: { id }, data: { lastLoginAt: new Date() } });
       },
+      async markTourSeen(id) {
+        await prisma.account.update({ where: { id }, data: { tourSeenAt: new Date() } });
+      },
     },
 
     students: {

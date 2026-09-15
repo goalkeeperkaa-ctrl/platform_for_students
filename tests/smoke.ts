@@ -335,6 +335,16 @@ async function main() {
 
   check('студента не пускают в админку', (await student.request('/api/admin/stats')).status === 401);
 
+  // Инструкция: сама открывается один раз, отметка — в учётной записи
+  check('гостю отметка инструкции закрыта', (await new Session().request('/api/tour')).status === 401);
+  const tourBefore = await student.request('/api/tour');
+  check('новый студент инструкцию не видел', tourBefore.status === 200 && tourBefore.body?.seen === false && tourBefore.body?.role === 'STUDENT', tourBefore.body);
+  const tourDone = await student.post('/api/tour', {});
+  const tourAfter = await student.request('/api/tour');
+  check('пройденная инструкция отмечается', tourDone.status === 200 && tourAfter.body?.seen === true, tourAfter.body);
+  const help = await new Session().request('/help');
+  check('страница помощи открыта гостю', help.status === 200 && String(help.body).includes('Как подтвердить учёбу?'), help.status);
+
   // ---------- Работодатель ----------
   console.log('\nРаботодатель');
   const employer = new Session();
@@ -705,6 +715,9 @@ async function main() {
   const kfuPage = await new Session().request('/institutions/kpfu');
   check('страница вуза открывается', kfuPage.status === 200 && String(kfuPage.body).includes('Приволжский) федеральный университет'), kfuPage.status);
   check('несуществующий вуз — 404', (await new Session().request('/institutions/no-such-school')).status === 404);
+  const ratingPage = await new Session().request('/institutions/rating');
+  check('рейтинг вузов открыт гостю', ratingPage.status === 200 && String(ratingPage.body).includes('Рейтинг учебных заведений'), ratingPage.status);
+  check('на странице вуза есть статистика студентов', String(kfuPage.body).includes('Студенты на платформе'));
 
   const ownerId = (await owner.request('/api/auth/me')).body.session?.profileId as string;
   const findOwner = async () =>

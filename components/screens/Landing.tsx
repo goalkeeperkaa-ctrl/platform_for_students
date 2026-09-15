@@ -245,6 +245,18 @@ export function Landing({
             <Link href="/institutions" className="transition-colors hover:text-paper">
               Учебные заведения
             </Link>
+            <Link href="/institutions/rating" className="transition-colors hover:text-paper">
+              Рейтинг вузов
+            </Link>
+            <Link href="/legal/terms" className="transition-colors hover:text-paper">
+              Соглашение
+            </Link>
+            <Link href="/legal/privacy" className="transition-colors hover:text-paper">
+              Политика ПДн
+            </Link>
+            <Link href="/help" className="transition-colors hover:text-paper">
+              Помощь
+            </Link>
             <Link href="/login?role=admin" className="transition-colors hover:text-paper">
               HR-менеджеру
             </Link>

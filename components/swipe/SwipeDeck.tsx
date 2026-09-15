@@ -203,7 +203,7 @@ export function SwipeDeck({ initial }: { initial: VacancyDTO[] }) {
     <div className="flex w-full flex-col items-center">
       <DeckProgress done={done} total={total.current} counts={counts} />
 
-      <div className="relative mt-5 h-[clamp(460px,64dvh,600px)] w-full max-w-[26rem]">
+      <div data-tour="deck" className="relative mt-5 h-[clamp(460px,64dvh,600px)] w-full max-w-[26rem]">
         {/* mode по умолчанию: улетающая карточка и поднимающаяся снизу
             должны двигаться одновременно, а не по очереди */}
         <AnimatePresence custom={exitDir}>

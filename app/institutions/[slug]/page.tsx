@@ -7,7 +7,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Chip';
 import { institutionLabel } from '@/lib/institutions';
-import { getInstitutionPublic } from '@/lib/services';
+import { RATING_MIN_PUBLIC, RATING_MIN_RANKED } from '@/lib/rating';
+import { getInstitutionPublic, getInstitutionRating } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,13 +23,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * Страница учебного заведения: название, город, описание, направления.
  *
  * Открыта без входа, как и страница компании. Студентов этого вуза здесь
- * нет ни списком, ни числом: по небольшому колледжу число уже почти
- * указывает на конкретных людей.
+ * нет списком, а числа — только обезличенные и от пяти студентов с
+ * подтверждённой учёбой: по небольшому колледжу число уже почти указывает
+ * на конкретных людей.
  */
 export default async function InstitutionPage({ params }: Props) {
   const institution = await getInstitutionPublic(params.slug);
   if (!institution) notFound();
 
+  const rating = await getInstitutionRating(institution.slug);
   const label = institutionLabel(institution);
   const website = institution.website && /^https?:\/\//i.test(institution.website) ? institution.website : null;
 
@@ -77,6 +80,38 @@ export default async function InstitutionPage({ params }: Props) {
           )}
         </section>
 
+        <section className="glass mt-6 rounded-3xl p-6 sm:p-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-eyebrow uppercase text-paper-faint">Студенты на платформе</h2>
+            <Link
+              href="/institutions/rating"
+              className="text-[13px] text-paper/75 underline-offset-4 transition-colors hover:text-paper hover:underline"
+            >
+              Рейтинг вузов
+            </Link>
+          </div>
+          {rating && rating.students !== null ? (
+            <>
+              <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Stat label="с подтверждённой учёбой" value={rating.students} />
+                <Stat label="откликов" value={rating.applications ?? 0} />
+                <Stat label="приглашены" value={rating.invited ?? 0} />
+                <Stat label="работают" value={rating.hired ?? 0} note={`${rating.share}% студентов`} />
+              </dl>
+              <p className="mt-4 text-[13px] text-paper-faint">
+                {rating.place
+                  ? `${rating.place}-е место в рейтинге вузов`
+                  : `Место в рейтинге — от ${RATING_MIN_RANKED} студентов с подтверждённой учёбой`}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-[14px] leading-relaxed text-paper-dim">
+              Статистика появится, когда на платформе будет не меньше {RATING_MIN_PUBLIC} студентов этого
+              вуза с подтверждённой учёбой.
+            </p>
+          )}
+        </section>
+
         {institution.directions.length > 0 && (
           <section className="glass mt-6 rounded-3xl p-6 sm:p-8">
             <h2 className="text-eyebrow uppercase text-paper-faint">Направления</h2>
@@ -99,6 +134,16 @@ export default async function InstitutionPage({ params }: Props) {
           </Link>
         </section>
       </main>
+    </div>
+  );
+}
+
+function Stat({ label, value, note }: { label: string; value: number; note?: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--hairline)] bg-graphite-900/45 p-4">
+      <dd className="text-[26px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-paper">{value}</dd>
+      <dt className="mt-2 text-[12.5px] leading-snug text-paper-faint">{label}</dt>
+      {note && <p className="mt-1 text-[12px] text-accent-200">{note}</p>}
     </div>
   );
 }

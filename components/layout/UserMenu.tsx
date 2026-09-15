@@ -1,20 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { LogOut } from 'lucide-react';
+import { BookOpen, Compass, HelpCircle, LogOut } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
+import { TourController } from '@/components/onboarding/Tour';
 import { springSnappy } from '@/lib/motion';
+import { TOUR_START_EVENT } from '@/lib/tour';
 import { cn } from '@/lib/utils';
 
 /**
- * Карточка пользователя и выход.
+ * Карточка пользователя, помощь и выход.
  *
  * Выход виден всегда, а не раскрывается по наведению: на телефоне
  * наведения нет вовсе, а прятать единственное действие за меню из
  * одного пункта — лишний слой ради лишнего слоя.
+ *
+ * «?» открывает два пункта: повторить инструкцию и страницу помощи. Здесь
+ * же живёт сама инструкция — шапка есть на каждом экране кабинета.
  *
  * Карточка ведёт в профиль, только если профиль есть: `href` передаёт
  * лишь кабинет студента. У работодателя и администратора своей анкеты
@@ -23,6 +28,24 @@ import { cn } from '@/lib/utils';
 export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: string; href?: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    function onDown(event: MouseEvent) {
+      if (helpRef.current && !helpRef.current.contains(event.target as Node)) setHelpOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setHelpOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [helpOpen]);
 
   async function logout() {
     setPending(true);
@@ -49,12 +72,16 @@ export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: st
     </>
   );
 
+  const roundButton =
+    'grid size-10 shrink-0 place-items-center rounded-full border border-[var(--hairline)] bg-graphite-900/50 text-paper/55 backdrop-blur transition-colors';
+
   return (
     <div className="flex items-center gap-1.5">
       {href ? (
         <Link
           href={href}
           title="Профиль"
+          data-tour="profile"
           className={cn(cardClass, 'transition-colors hover:border-[var(--hairline-strong)] hover:bg-graphite-800/60')}
         >
           {card}
@@ -62,6 +89,46 @@ export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: st
       ) : (
         <div className={cardClass}>{card}</div>
       )}
+
+      <div ref={helpRef} className="relative">
+        <motion.button
+          type="button"
+          onClick={() => setHelpOpen((value) => !value)}
+          whileHover={{ y: -1.5 }}
+          whileTap={{ scale: 0.92 }}
+          transition={springSnappy}
+          aria-label="Помощь"
+          aria-expanded={helpOpen}
+          title="Помощь"
+          data-tour="help"
+          className={cn(roundButton, 'hover:border-paper/30 hover:text-paper')}
+        >
+          <HelpCircle className="size-4" />
+        </motion.button>
+        {helpOpen && (
+          <div className="absolute right-0 top-12 z-[60] w-60 rounded-2xl border border-[var(--hairline)] bg-graphite-900 p-1.5 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setHelpOpen(false);
+                window.dispatchEvent(new Event(TOUR_START_EVENT));
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13.5px] text-paper transition-colors hover:bg-paper/[0.06]"
+            >
+              <Compass className="size-4 shrink-0 text-accent-300" aria-hidden />
+              Как пользоваться
+            </button>
+            <Link
+              href="/help"
+              onClick={() => setHelpOpen(false)}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13.5px] text-paper transition-colors hover:bg-paper/[0.06]"
+            >
+              <BookOpen className="size-4 shrink-0 text-accent-300" aria-hidden />
+              Частые вопросы
+            </Link>
+          </div>
+        )}
+      </div>
 
       <motion.button
         type="button"
@@ -72,10 +139,12 @@ export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: st
         transition={springSnappy}
         aria-label="Выйти из аккаунта"
         title="Выйти"
-        className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--hairline)] bg-graphite-900/50 text-paper/55 backdrop-blur transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-50"
+        className={cn(roundButton, 'hover:border-danger/40 hover:text-danger disabled:opacity-50')}
       >
         <LogOut className="size-4" />
       </motion.button>
+
+      <TourController />
     </div>
   );
 }

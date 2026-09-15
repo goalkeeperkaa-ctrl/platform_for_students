@@ -140,6 +140,8 @@ model Account {
   termsVersion       String?
   termsAcceptedAt    DateTime?
   marketingConsentAt DateTime?
+  // Инструкцию по кабинету видел — сама больше не открывается
+  tourSeenAt         DateTime?
   createdAt   DateTime  @default(now())
 
   student     Student?

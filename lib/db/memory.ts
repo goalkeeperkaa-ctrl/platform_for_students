@@ -122,6 +122,7 @@ async function seed(): Promise<Tables> {
         termsVersion: null,
         termsAcceptedAt: null,
         marketingConsentAt: null,
+        tourSeenAt: null,
         createdAt: now(),
       };
       t.accounts.push(account);
@@ -179,6 +180,7 @@ async function seed(): Promise<Tables> {
     termsVersion: null,
     termsAcceptedAt: null,
     marketingConsentAt: null,
+    tourSeenAt: null,
     createdAt: now(),
   };
   t.accounts.push(adminAccount);
@@ -202,6 +204,7 @@ async function seed(): Promise<Tables> {
     termsVersion: null,
     termsAcceptedAt: null,
     marketingConsentAt: null,
+    tourSeenAt: null,
     createdAt: now(),
   };
   t.accounts.push(studentAccount);
@@ -265,6 +268,7 @@ async function seed(): Promise<Tables> {
       termsVersion: null,
       termsAcceptedAt: null,
       marketingConsentAt: null,
+      tourSeenAt: null,
       createdAt: now(),
     };
     t.accounts.push(acc);
@@ -424,6 +428,10 @@ export async function createMemoryStore(): Promise<DataStore> {
     kind: 'memory',
 
     accounts: {
+      async markTourSeen(id) {
+        const account = t.accounts.find((a) => a.id === id);
+        if (account) account.tourSeenAt = now();
+      },
       async findByEmailHash(emailHash) {
         return clone(t.accounts.find((a) => a.emailHash === emailHash) ?? null);
       },
@@ -453,6 +461,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           termsVersion: null,
           termsAcceptedAt: null,
           marketingConsentAt: null,
+          tourSeenAt: null,
           createdAt: now(),
         };
         const student: StudentRecord = {
@@ -652,6 +661,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           termsVersion: null,
           termsAcceptedAt: null,
           marketingConsentAt: null,
+          tourSeenAt: null,
           createdAt: now(),
         };
         const employer: EmployerRecord = {
@@ -777,6 +787,7 @@ export async function createMemoryStore(): Promise<DataStore> {
               termsVersion: null,
               termsAcceptedAt: null,
               marketingConsentAt: null,
+              tourSeenAt: null,
               createdAt: now(),
             };
             t.accounts.push(account);

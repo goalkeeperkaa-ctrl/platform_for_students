@@ -8,6 +8,7 @@ import { NEXT_STEP_STATUSES, track } from '@/lib/analytics';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import { isFreeEmail } from '@/lib/company';
 import { PILOT_CITY } from '@/lib/pilot';
+import { rankInstitutions, type RatingRow } from '@/lib/rating';
 import { isPendingExpired, pendingExpiresAt, studyDocDeadline, studyStatus, workdaysLeft } from '@/lib/study';
 import {
   APPLICATION_STATUSES,
@@ -844,4 +845,62 @@ export async function listEmployerAddresses(employerId: string): Promise<Company
     });
   }
   return addresses;
+}
+
+/**
+ * Рейтинг учебных заведений пилота. Только студенты с подтверждённой учёбой;
+ * правила мест и порогов — в lib/rating.ts.
+ *
+ * «Приглашены» и «работают» считаются по текущему статусу откликов: студент,
+ * которого пригласили, а потом отказали, в «приглашённые» уже не попадает.
+ */
+export async function buildInstitutionRating(): Promise<RatingRow[]> {
+  const store = await getStore();
+  const [institutions, students, applications] = await Promise.all([
+    store.institutions.list(),
+    store.students.list(),
+    store.applications.listAll(),
+  ]);
+
+  const verified = new Map<string, StudentRecord[]>();
+  for (const student of students) {
+    if (!student.studyVerified || !student.institutionId) continue;
+    verified.set(student.institutionId, [...(verified.get(student.institutionId) ?? []), student]);
+  }
+  const byStudent = new Map<string, ApplicationStatus[]>();
+  for (const application of applications) {
+    byStudent.set(application.studentId, [...(byStudent.get(application.studentId) ?? []), application.status]);
+  }
+  const nextStep = new Set<string>(NEXT_STEP_STATUSES);
+
+  return rankInstitutions(
+    institutions
+      .filter((item) => item.city === PILOT_CITY)
+      .map((item) => {
+        const list = verified.get(item.id) ?? [];
+        let applied = 0;
+        let invited = 0;
+        let hired = 0;
+        for (const student of list) {
+          const statuses = byStudent.get(student.id) ?? [];
+          applied += statuses.length;
+          if (statuses.some((status) => nextStep.has(status))) invited++;
+          if (statuses.includes('HIRED')) hired++;
+        }
+        return {
+          slug: item.slug,
+          label: item.shortName ?? item.name,
+          name: item.name,
+          students: list.length,
+          applications: applied,
+          invited,
+          hired,
+        };
+      }),
+  );
+}
+
+/** Строка рейтинга одного вуза — для его страницы. */
+export async function getInstitutionRating(slug: string): Promise<RatingRow | null> {
+  return (await buildInstitutionRating()).find((row) => row.slug === slug) ?? null;
 }

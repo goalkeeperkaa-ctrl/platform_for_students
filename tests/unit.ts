@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { ageFromIso, fullYears, parseIsoDate } from '../lib/age';
 import { companyRegistrationSchema, innSchema } from '../lib/company';
 import { isValidInn } from '../lib/inn';
+import { rankInstitutions } from '../lib/rating';
 import { fitHours, maxHoursPerWeek } from '../lib/schedule';
 import { addWorkdays, isPendingExpired, studyStatus, workdaysLeft } from '../lib/study';
 import { registrationSteps } from '../lib/validation';
@@ -129,6 +130,37 @@ test('статус учёбы складывается из отметки, фа
   assert.equal(studyStatus({ studyVerified: false, studyDocUrl: '/api/files/study/x.pdf', studyReviewNote: 'старая' }), 'PENDING');
   assert.equal(studyStatus({ studyVerified: false, studyDocUrl: null, studyReviewNote: 'нечитаемо' }), 'REJECTED');
   assert.equal(studyStatus({ studyVerified: false, studyDocUrl: null, studyReviewNote: null }), 'NONE');
+});
+
+console.log('\nРейтинг вузов');
+const school = (slug: string, students: number, hired: number) => ({
+  slug,
+  label: slug.toUpperCase(),
+  name: slug,
+  students,
+  applications: students * 2,
+  invited: hired,
+  hired,
+});
+test('меньше пяти студентов — цифры не публикуются', () => {
+  const [row] = rankInstitutions([school('a', 4, 1)]);
+  assert.equal(row.students, null);
+  assert.equal(row.share, null);
+  assert.equal(row.place, null);
+});
+test('от пяти до девяти — цифры есть, места нет', () => {
+  const [row] = rankInstitutions([school('a', 7, 2)]);
+  assert.equal(row.students, 7);
+  assert.equal(row.share, 29);
+  assert.equal(row.place, null);
+});
+test('место — по доле, при равной доле выше тот, где работающих больше; ничья делит место', () => {
+  const rows = rankInstitutions([school('x', 20, 10), school('y', 10, 5), school('z', 10, 6), school('w', 10, 5)]);
+  const place = (slug: string) => rows.find((r) => r.slug === slug)?.place;
+  assert.equal(place('z'), 1);
+  assert.equal(place('x'), 2);
+  assert.equal(place('y'), 3);
+  assert.equal(place('w'), 3);
 });
 
 console.log(`\n${passed} проверок пройдено, ${failures.length} провалено`);
