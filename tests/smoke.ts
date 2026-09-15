@@ -13,6 +13,8 @@
  * работодатель — не должен попадать в админку.
  */
 
+import crypto from 'node:crypto';
+
 const BASE = process.env.SMOKE_URL ?? 'http://localhost:3007';
 
 /**
@@ -1289,6 +1291,59 @@ async function main() {
     pilot.body?.students,
   );
   check('страница метрик пилота открывается', (await admin.request('/admin/pilot')).status === 200);
+
+  // ---------- Вход сотрудника из CRM ----------
+  console.log('\nВход из CRM');
+  const ssoSecret = process.env.STUDENTS_SSO_SECRET?.trim() ?? '';
+  const crmTicket = (claims: Record<string, unknown>, secret = ssoSecret) => {
+    const now = Math.floor(Date.now() / 1000);
+    const body = Buffer.from(
+      JSON.stringify({
+        v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', sub: 'usr_smoke', email: `smoke-${Date.now() + 4242}@demo.ru`,
+        name: 'Сотрудник Проверкин', position: 'Администратор', permissions: ['students'], iat: now, exp: now + 60,
+        jti: crypto.randomBytes(16).toString('base64url'), ...claims,
+      }),
+    ).toString('base64url');
+    return `${body}.${crypto.createHmac('sha256', secret || 'секрет-не-задан').update(body).digest('base64url')}`;
+  };
+  const enterFromCrm = async (ticket: string) => {
+    const response = await fetch(`${BASE}/api/auth/crm?ticket=${encodeURIComponent(ticket)}`, { redirect: 'manual' });
+    return {
+      status: response.status,
+      location: response.headers.get('location') ?? '',
+      cookie: (response.headers.get('set-cookie') ?? '').split(';')[0],
+    };
+  };
+  if (ssoSecret.length >= 32) {
+    const staffEmail = `smoke-${Date.now() + 4242}@demo.ru`;
+    const firstTicket = crmTicket({ email: staffEmail });
+    const entered = await enterFromCrm(firstTicket);
+    check(
+      'сотрудник из CRM входит в панель по билету',
+      [303, 307].includes(entered.status) && entered.location.endsWith('/admin/students') && entered.cookie.startsWith('fhr_session='),
+      entered.status,
+    );
+    const staff = new Session();
+    (staff as any).cookie = entered.cookie;
+    check('выданный раздел открыт', (await staff.request('/api/admin/students')).status === 200);
+    check('невыданный раздел закрыт', (await staff.request('/api/admin/moderation')).status === 403);
+    check('метрики пилота без доступа закрыты', (await staff.request('/api/admin/pilot')).status === 403);
+    const staffStats = await staff.request('/api/admin/stats');
+    check('панель открыта, журнал без доступа к пилоту скрыт', staffStats.status === 200 && (staffStats.body?.audit ?? []).length === 0, staffStats.status);
+    check('страница невыданного раздела уводит на панель', [303, 307].includes((await staff.request('/admin/moderation')).status));
+    const replay = await enterFromCrm(firstTicket);
+    check('по тому же билету второй раз не войти', replay.location.includes('crm=used'), replay.location);
+    const past = Math.floor(Date.now() / 1000) - 120;
+    const expired = await enterFromCrm(crmTicket({ email: staffEmail, iat: past, exp: past + 60 }));
+    check('просроченный билет не пускает', expired.location.includes('crm=expired'), expired.location);
+    const forged = await enterFromCrm(crmTicket({ email: staffEmail, permissions: ['moderation', 'students', 'pilot'] }, 'x'.repeat(40)));
+    check('поддельный билет не пускает', forged.location.includes('crm=expired'), forged.location);
+    const conflict = await enterFromCrm(crmTicket({ email }));
+    check('почта студента не становится входом в панель', conflict.location.includes('crm=conflict'), conflict.location);
+  } else {
+    const notConfigured = await enterFromCrm(crmTicket({}));
+    check('без секрета вход из CRM выключен', notConfigured.location.includes('crm=config'), notConfigured.location);
+  }
 
   // ---------- Напоминания и сводки ----------
   console.log('\nНапоминания');

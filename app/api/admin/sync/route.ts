@@ -1,7 +1,7 @@
 import { handle, ok, tooManyRequests } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { CRM_VACANCIES } from '@/lib/db/seed-data';
-import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
+import { assertSameOrigin, audit, requireStaff } from '@/lib/security/guards';
 import { rateLimit } from '@/lib/security/rate-limit';
 import { toSyncRunDTO } from '@/lib/services';
 
@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 export async function POST(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
-    const session = await requireRole('ADMIN');
+    const session = await requireStaff('moderation');
 
     const limit = await rateLimit('sync', session.accountId);
     if (!limit.ok) return tooManyRequests(limit.retryAfter);

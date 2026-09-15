@@ -1,6 +1,6 @@
 import { fail, handle, ok } from '@/lib/api';
 import { runNotificationJobs } from '@/lib/notify';
-import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
+import { assertSameOrigin, audit, requireStaff } from '@/lib/security/guards';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
-    const session = await requireRole('ADMIN');
+    const session = await requireStaff('students');
 
     const body = (await request.json().catch(() => ({}))) as { at?: unknown };
     const at = process.env.NODE_ENV !== 'production' && typeof body.at === 'string' ? new Date(body.at) : new Date();

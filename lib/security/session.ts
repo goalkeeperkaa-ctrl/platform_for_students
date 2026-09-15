@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+import { readStaffPermissions, type StaffPermission } from '@/lib/staff-permissions';
 import type { Role, SessionUser } from '@/lib/types';
 
 /**
@@ -31,19 +32,26 @@ export interface SessionClaims extends JWTPayload {
   role: Role;
   profileId: string | null;
   name: string;
+  /** Разделы панели HR у сотрудника, вошедшего из CRM */
+  permissions?: StaffPermission[];
 }
 
-export async function signSession(user: SessionUser): Promise<string> {
-  return new SignJWT({
+/** Срок — две недели; сотруднику из CRM вызывающий передаёт рабочий день. */
+export async function signSession(user: SessionUser, maxAgeSeconds: number = MAX_AGE_SECONDS): Promise<string> {
+  const claims = {
     role: user.role,
     profileId: user.profileId,
     name: user.name,
-  } satisfies Omit<SessionClaims, keyof JWTPayload>)
+    // У HR-учётки, заведённой здесь, списка разделов нет — ей открыто всё
+    ...(user.permissions ? { permissions: user.permissions } : {}),
+  } satisfies Omit<SessionClaims, keyof JWTPayload>;
+
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(user.accountId)
     .setIssuer(ISSUER)
     .setIssuedAt()
-    .setExpirationTime(`${MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${maxAgeSeconds}s`)
     .sign(secret());
 }
 
@@ -52,11 +60,13 @@ export async function verifySession(token: string | undefined): Promise<SessionU
   try {
     const { payload } = await jwtVerify<SessionClaims>(token, secret(), { issuer: ISSUER });
     if (!payload.sub || !payload.role) return null;
+    const permissions = payload.role === 'ADMIN' ? readStaffPermissions(payload.permissions) : undefined;
     return {
       accountId: payload.sub,
       role: payload.role,
       profileId: payload.profileId ?? null,
       name: payload.name ?? '',
+      ...(permissions ? { permissions } : {}),
     };
   } catch {
     return null;

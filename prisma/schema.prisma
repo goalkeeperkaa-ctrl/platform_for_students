@@ -193,6 +193,14 @@ model NotificationLog {
   @@unique([accountId, key])
 }
 
+/// Использованные билеты входа из CRM: второй раз по тому же билету не войти.
+model StaffTicket {
+  jti       String   @id
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model Student {
   id        String  @id @default(cuid())
   accountId String  @unique

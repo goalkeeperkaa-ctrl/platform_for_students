@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Студенты' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminStudentsPage() {
-  const session = await requireAdminPage('/admin/students');
+  const session = await requireAdminPage('/admin/students', 'students');
   const [students, institutions, pending, pendingStudy] = await Promise.all([
     listAdminStudents(),
     listInstitutionOptions(),
@@ -20,7 +20,7 @@ export default async function AdminStudentsPage() {
   return (
     <AppShell
       user={{ name: session.name || 'HR-менеджер', subtitle: 'Fattakhov HR Agency' }}
-      nav={adminNav(pending, pendingStudy)}
+      nav={adminNav(pending, pendingStudy, session.permissions)}
       wide
     >
       <AdminStudents students={students} institutions={institutions} />

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fail, handle } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { getSession } from '@/lib/security/guards';
+import { staffCan } from '@/lib/staff-permissions';
 import { readStored } from '@/lib/storage';
 import { isVacancyVisible } from '@/lib/vacancy';
 import type { SessionUser } from '@/lib/types';
@@ -95,7 +96,8 @@ async function readCompanyFile(session: SessionUser | null, name: string) {
 }
 
 async function canRead(session: SessionUser, url: string): Promise<boolean> {
-  if (session.role === 'ADMIN') return true;
+  // Сотрудник из CRM видит файлы студентов, только если ему выданы студенты или модерация
+  if (session.role === 'ADMIN') return staffCan(session, 'students') || staffCan(session, 'moderation');
   const store = await getStore();
 
   if (session.role === 'STUDENT') {

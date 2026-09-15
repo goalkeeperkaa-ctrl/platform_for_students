@@ -1,6 +1,6 @@
 import { fail, handle, ok } from '@/lib/api';
 import { getStore } from '@/lib/db';
-import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
+import { assertSameOrigin, audit, requireStaff } from '@/lib/security/guards';
 import { buildModerationQueue } from '@/lib/services';
 import { moderationDecisionSchema, vacancyContentOf } from '@/lib/vacancy';
 import { track } from '@/lib/analytics';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 /** Очередь модерации: компании и вакансии, ждущие решения. */
 export async function GET() {
   return handle(async () => {
-    await requireRole('ADMIN');
+    await requireStaff('moderation');
     return ok(await buildModerationQueue());
   });
 }
@@ -28,7 +28,7 @@ export async function GET() {
 export async function POST(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
-    const session = await requireRole('ADMIN');
+    const session = await requireStaff('moderation');
     const { entity, id, decision, note, version } = moderationDecisionSchema.parse(await request.json());
     const store = await getStore();
     const approve = decision === 'APPROVE';

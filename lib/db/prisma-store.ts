@@ -90,6 +90,10 @@ export function createPrismaStore(): DataStore {
       async setNotifyEmail(id, enabled) {
         await prisma.account.update({ where: { id }, data: { notifyEmail: enabled } });
       },
+      createStaff: (email) =>
+        prisma.account.create({
+          data: { role: 'ADMIN', emailEnc: encrypt(email), emailHash: blindIndex(email), emailVerifiedAt: new Date() },
+        }),
     },
 
     students: {
@@ -585,6 +589,20 @@ export function createPrismaStore(): DataStore {
       async claim(accountId, key) {
         try {
           await prisma.notificationLog.create({ data: { accountId, key } });
+          return true;
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return false;
+          throw err;
+        }
+      },
+    },
+
+    staffTickets: {
+      async consume(jti) {
+        // Билет живёт минуту — отметки старше суток хранить незачем
+        await prisma.staffTicket.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 86_400_000) } } });
+        try {
+          await prisma.staffTicket.create({ data: { jti } });
           return true;
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return false;

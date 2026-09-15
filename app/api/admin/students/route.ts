@@ -1,6 +1,6 @@
 import { fail, handle, ok } from '@/lib/api';
 import { getStore } from '@/lib/db';
-import { assertSameOrigin, audit, requireRole } from '@/lib/security/guards';
+import { assertSameOrigin, audit, requireStaff } from '@/lib/security/guards';
 import { listAdminStudents, releasePendingApplications } from '@/lib/services';
 import { notifyNewApplications, notifyStudyDecision } from '@/lib/notify';
 import { deleteStored } from '@/lib/storage';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 /** Все студенты для HR — с вузом, статусом, справкой и отметкой о подтверждении учёбы. */
 export async function GET() {
   return handle(async () => {
-    await requireRole('ADMIN');
+    await requireStaff('students');
     return ok({ students: await listAdminStudents() });
   });
 }
@@ -30,7 +30,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
-    const session = await requireRole('ADMIN');
+    const session = await requireStaff('students');
     const { studentId, status, studyVerified, studyDecision, note } = adminStudentUpdateSchema.parse(
       await request.json(),
     );

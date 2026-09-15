@@ -9,6 +9,9 @@
  * через API не проверить: время там всегда «сейчас».
  */
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { verifyStaffTicket } from '../lib/security/staff-ticket';
+import { staffCan, staffHome } from '../lib/staff-permissions';
 import { ageFromIso, fullYears, parseIsoDate } from '../lib/age';
 import { companyRegistrationSchema, innSchema } from '../lib/company';
 import { isValidInn } from '../lib/inn';
@@ -209,6 +212,46 @@ test('ссылка сброса есть и в тексте, и в кнопке'
 test('на новый отклик письма студенту нет, на приглашение — есть', () => {
   assert.equal(applicationStatusMail({ status: 'NEW', company: 'А', title: 'Б', url: 'https://x.org' }), null);
   assert.ok(applicationStatusMail({ status: 'INVITED', company: 'А', title: 'Б', url: 'https://x.org' })?.subject.includes('приглашают'));
+});
+
+console.log('\nВход из CRM');
+const ssoSecret = 'k'.repeat(40);
+function signTicket(claims: Record<string, unknown>, secret = ssoSecret): string {
+  const now = Math.floor(Date.now() / 1000);
+  const body = Buffer.from(
+    JSON.stringify({
+      v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', sub: 'usr_1', email: 'Staff@Agency.ru',
+      name: 'Анна', position: 'Администратор', permissions: ['students'], iat: now, exp: now + 60,
+      jti: 'j'.repeat(22), ...claims,
+    }),
+  ).toString('base64url');
+  return `${body}.${crypto.createHmac('sha256', secret).update(body).digest('base64url')}`;
+}
+test('верный билет из CRM принимается, почта — в нижнем регистре', () => {
+  const result = verifyStaffTicket(signTicket({}), ssoSecret);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.ticket.email, 'staff@agency.ru');
+    assert.deepEqual(result.ticket.permissions, ['students']);
+  }
+});
+test('чужая подпись, истёкший срок, чужой адресат и мусор не проходят', () => {
+  assert.deepEqual(verifyStaffTicket(signTicket({}, 'x'.repeat(40)), ssoSecret), { ok: false, reason: 'SIGNATURE' });
+  const past = Math.floor(Date.now() / 1000) - 120;
+  assert.deepEqual(verifyStaffTicket(signTicket({ iat: past, exp: past + 60 }), ssoSecret), { ok: false, reason: 'EXPIRED' });
+  assert.deepEqual(verifyStaffTicket(signTicket({ aud: 'другое' }), ssoSecret), { ok: false, reason: 'CLAIMS' });
+  assert.deepEqual(verifyStaffTicket('мусор', ssoSecret), { ok: false, reason: 'FORMAT' });
+});
+test('билет без известных разделов или с долгим сроком не принимается', () => {
+  assert.equal(verifyStaffTicket(signTicket({ permissions: ['admin'] }), ssoSecret).ok, false);
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(verifyStaffTicket(signTicket({ iat: now, exp: now + 3600 }), ssoSecret).ok, false);
+});
+test('разделы сотрудника: без списка — всё, со списком — только выданное', () => {
+  assert.equal(staffCan({ role: 'ADMIN' }, 'moderation'), true);
+  assert.equal(staffCan({ role: 'ADMIN', permissions: ['students'] }, 'moderation'), false);
+  assert.equal(staffCan({ role: 'STUDENT' }, 'students'), false);
+  assert.equal(staffHome(['pilot', 'students']), '/admin/students');
 });
 
 console.log(`\n${passed} проверок пройдено, ${failures.length} провалено`);

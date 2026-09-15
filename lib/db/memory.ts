@@ -66,6 +66,7 @@ interface Tables {
   events: EventRecord[];
   authTokens: AuthTokenRecord[];
   notificationLog: Array<{ accountId: string; key: string; createdAt: Date }>;
+  staffTickets: string[];
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -109,6 +110,7 @@ async function seed(): Promise<Tables> {
     events: [],
     authTokens: [],
     notificationLog: [],
+    staffTickets: [],
   };
 
   // --- Работодатели и вакансии из «CRM» ---
@@ -466,6 +468,28 @@ export async function createMemoryStore(): Promise<DataStore> {
       async setNotifyEmail(id, enabled) {
         const acc = t.accounts.find((a) => a.id === id);
         if (acc) acc.notifyEmail = enabled;
+      },
+      async createStaff(email) {
+        const emailHash = blindIndex(email);
+        if (t.accounts.some((a) => a.emailHash === emailHash)) throw new AccountExistsError();
+        const account: AccountRecord = {
+          id: randomUUID(),
+          role: 'ADMIN',
+          emailEnc: encrypt(email),
+          emailHash,
+          passwordHash: null,
+          isActive: true,
+          lastLoginAt: null,
+          termsVersion: null,
+          termsAcceptedAt: null,
+          marketingConsentAt: null,
+          tourSeenAt: null,
+          emailVerifiedAt: now(),
+          notifyEmail: true,
+          createdAt: now(),
+        };
+        t.accounts.push(account);
+        return clone(account);
       },
     },
 
@@ -1123,6 +1147,15 @@ export async function createMemoryStore(): Promise<DataStore> {
       async claim(accountId, key) {
         if (t.notificationLog.some((n) => n.accountId === accountId && n.key === key)) return false;
         t.notificationLog.push({ accountId, key, createdAt: now() });
+        return true;
+      },
+    },
+
+    staffTickets: {
+      async consume(jti) {
+        if (t.staffTickets.includes(jti)) return false;
+        t.staffTickets.push(jti);
+        if (t.staffTickets.length > 5000) t.staffTickets.splice(0, t.staffTickets.length - 5000);
         return true;
       },
     },

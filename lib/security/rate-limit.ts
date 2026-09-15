@@ -55,6 +55,8 @@ export const RATE_LIMITS = {
   // Сброс пароля: на адрес — с запасом на общий NAT, на почту — как у входа
   passwordResetIp: { limit: 20, windowSeconds: 3600 },
   passwordReset: { limit: 5, windowSeconds: 3600 },
+  // Вход из CRM: билеты разовые и живут минуту, лимит — от перебора подписи
+  crmTicket: { limit: 30, windowSeconds: 900 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;

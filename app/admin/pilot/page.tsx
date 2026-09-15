@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Метрики пилота' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPilotPage() {
-  const session = await requireAdminPage('/admin/pilot');
+  const session = await requireAdminPage('/admin/pilot', 'pilot');
   const [metrics, pending, pendingStudy] = await Promise.all([
     buildPilotMetrics(),
     countPendingModeration(),
@@ -19,7 +19,7 @@ export default async function AdminPilotPage() {
   return (
     <AppShell
       user={{ name: session.name || 'HR-менеджер', subtitle: 'Fattakhov HR Agency' }}
-      nav={adminNav(pending, pendingStudy)}
+      nav={adminNav(pending, pendingStudy, session.permissions)}
       wide
     >
       <PilotDashboard metrics={metrics} />

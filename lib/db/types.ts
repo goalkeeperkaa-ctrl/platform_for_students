@@ -453,6 +453,8 @@ export interface DataStore {
     markEmailVerified(id: string): Promise<void>;
     setPassword(id: string, passwordHash: string): Promise<void>;
     setNotifyEmail(id: string, enabled: boolean): Promise<void>;
+    /** Сотрудник агентства при первом входе из CRM: без пароля, почта подтверждена CRM */
+    createStaff(email: string): Promise<AccountRecord>;
   };
 
   authTokens: {
@@ -470,6 +472,11 @@ export interface DataStore {
   notifications: {
     /** Отметить письмо отправленным. false — такое уже уходило, второй раз не шлём */
     claim(accountId: string, key: string): Promise<boolean>;
+  };
+
+  staffTickets: {
+    /** Погасить билет входа из CRM. false — по нему уже входили */
+    consume(jti: string): Promise<boolean>;
   };
 
   students: {

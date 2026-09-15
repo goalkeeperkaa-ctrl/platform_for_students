@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getStore } from '@/lib/db';
 import type { Role, SessionUser } from '@/lib/types';
 import { SESSION_COOKIE, verifySession } from './session';
+import { staffCan, type StaffPermission } from '@/lib/staff-permissions';
 import { clientIp } from './rate-limit';
 
 /** Текущая сессия из httpOnly-куки. null — гость. */
@@ -38,6 +39,22 @@ export class HttpError extends Error {
 export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   const session = await getSessionWithRole(...roles);
   if (!session) throw new HttpError(401, 'Требуется вход в систему', 'UNAUTHORIZED');
+  return session;
+}
+
+/**
+ * Сотрудник в API панели HR. Без permission — любой, кто вошёл в панель;
+ * с ним — только тот, кому раздел выдан в CRM. Отключённая учётка не проходит,
+ * даже пока жива её кука.
+ */
+export async function requireStaff(permission?: StaffPermission): Promise<SessionUser> {
+  const session = await requireRole('ADMIN');
+  const store = await getStore();
+  const account = await store.accounts.findById(session.accountId);
+  if (!account || !account.isActive) throw new HttpError(401, 'Требуется вход в систему', 'UNAUTHORIZED');
+  if (permission && !staffCan(session, permission)) {
+    throw new HttpError(403, 'Этот раздел вам не выдан — доступы выдаёт владелец в CRM', 'FORBIDDEN');
+  }
   return session;
 }
 
@@ -103,12 +120,14 @@ export async function requireEmployerPage(next = '/employer') {
   return { session, employer, store };
 }
 
-export async function requireAdminPage(next = '/admin') {
+export async function requireAdminPage(next = '/admin', permission?: StaffPermission) {
   const session = await getSessionWithRole('ADMIN');
   if (!session) redirect(`/login?next=${encodeURIComponent(next)}`);
   const store = await getStore();
   const account = await store.accounts.findById(session.accountId);
   if (!account || !account.isActive) redirect(`/logout?reason=stale&next=${encodeURIComponent(next)}`);
+  // Невыданный раздел — на панель, а не ошибкой: вкладки его и так не показывают
+  if (permission && !staffCan(session, permission)) redirect('/admin');
   return session;
 }
 

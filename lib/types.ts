@@ -1,4 +1,5 @@
 import type { StudyStatus } from '@/lib/study';
+import type { StaffPermission } from '@/lib/staff-permissions';
 
 /**
  * Доменные типы платформы.
@@ -322,6 +323,8 @@ export interface SessionUser {
   /** Профиль студента / работодателя, если он есть */
   profileId: string | null;
   name: string;
+  /** Разделы панели HR у сотрудника из CRM; нет — учётке открыто всё */
+  permissions?: StaffPermission[];
 }
 
 export interface AdminStats {

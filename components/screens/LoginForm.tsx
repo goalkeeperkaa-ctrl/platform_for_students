@@ -28,6 +28,15 @@ interface DemoHint {
   employerCode: string;
 }
 
+/** Почему вход из CRM не удался — человеку, который нажал кнопку в CRM. */
+const CRM_LOGIN_MESSAGES: Record<string, string> = {
+  expired: 'Ссылка входа из CRM устарела или повреждена. Нажмите «Открыть студенческую платформу» в CRM ещё раз.',
+  used: 'Эта ссылка входа уже использована. Нажмите кнопку в CRM ещё раз.',
+  conflict: 'Эта почта уже занята учётной записью студента или компании. Попросите владельца указать сотруднику другую почту в CRM.',
+  disabled: 'Доступ к панели отключён. Обратитесь к владельцу агентства.',
+  config: 'Вход из CRM не настроен: нужен STUDENTS_SSO_SECRET — тот же, что в CRM.',
+};
+
 export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -94,6 +103,11 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         {/* Пришли с /logout?reason=stale: сессия ссылалась на аккаунт,
             которого больше нет. Без пояснения человек видит форму входа
             без причины и решает, что его выкинуло просто так. */}
+        {params.get('crm') && (
+          <div className="mb-4 rounded-2xl border border-warn/35 bg-warn/[0.08] p-4 text-[13px] leading-relaxed text-warn">
+            {CRM_LOGIN_MESSAGES[params.get('crm') ?? ''] ?? CRM_LOGIN_MESSAGES.expired}
+          </div>
+        )}
         {params.get('reset') === '1' && (
           <div className="mb-4 rounded-2xl border border-yes/30 bg-yes/[0.08] p-4 text-[13px] leading-relaxed text-paper">
             Пароль изменён — войдите с новым.
