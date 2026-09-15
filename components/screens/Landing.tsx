@@ -36,9 +36,12 @@ const STEPS = [
 export function Landing({
   vacancies,
   companies,
+  agencyUrl,
 }: {
   vacancies: VacancyDTO[];
   companies: string[];
+  /** Сайт агентства; null — адрес на проде не задан, ссылки нет */
+  agencyUrl: string | null;
 }) {
   const navigate = useCurtainNav();
 
@@ -236,6 +239,12 @@ export function Landing({
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <Logo href={null} />
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-paper-faint">
+            {/* Сайт агентства — отдельное приложение, поэтому <a>, а не Link */}
+            {agencyUrl && (
+              <a href={agencyUrl} className="transition-colors hover:text-paper">
+                Сайт агентства
+              </a>
+            )}
             <Link href="/login" className="transition-colors hover:text-paper">
               Вход для студентов
             </Link>
