@@ -117,7 +117,7 @@ async function main() {
   const student = new Session();
   const email = `smoke-${Date.now()}@demo.ru`;
 
-  const registered = await student.post('/api/auth/register', {
+  const studentPayload = {
     fullName: 'Тест Тестов',
     gender: 'MALE',
     birthDate: '2005-04-12',
@@ -137,38 +137,52 @@ async function main() {
     phone: '+7 900 111-22-33',
     consent: true,
     terms: true,
-  });
-  check('регистрация', registered.status === 201, registered.body);
+  };
+  const registerStarted = await student.post('/api/auth/register', studentPayload);
+  check('регистрация принята, код отправлен', registerStarted.status === 201 && !!registerStarted.body?.pending, registerStarted.body);
+  let pendingToken = registerStarted.body?.pending as string;
 
   // HR нужен уже здесь: учёбу нового студента подтверждает он, и до этого
   // отклики студента ждут и работодателям не уходят
   const hr = new Session();
   const hrLogin = await hr.post('/api/auth/login', { email: 'admin@fattakhov.ru', password: 'Admin12345!' });
   check('HR-менеджер входит', hrLogin.status === 200, hrLogin.body);
-  const studentId = (await student.request('/api/auth/me')).body.session?.profileId as string;
 
-  // Почта: код приходит при регистрации; подтверждается ниже, после решения HR по справке
+  // Почта: код нужен до создания учётной записи — аккаунта ещё нет
   check('журнал писем разработки доступен', (await fetch(`${BASE}/api/dev/outbox`)).status === 400);
-  const meBefore = await student.request('/api/auth/me');
-  check('новая почта не подтверждена', meBefore.body?.account?.emailVerified === false, meBefore.body?.account);
-  const codeMail = await lastMail(email, 'Код подтверждения');
-  const emailCode = codeFrom(codeMail);
-  check('письмо с кодом пришло при регистрации', !!emailCode, codeMail?.subject);
-  const resendTooSoon = await student.post('/api/auth/email', {});
+  const emailCode = codeFrom(await lastMail(email, 'Код подтверждения'));
+  check('письмо с кодом пришло при регистрации', !!emailCode, emailCode);
+
+  const resendTooSoon = await student.post('/api/auth/register/resend', { pending: pendingToken });
   check(
     'повторный код не раньше чем через минуту',
     resendTooSoon.status === 429 && typeof resendTooSoon.body?.retryAfter === 'number',
     resendTooSoon.body,
   );
-  check('гость код не подтверждает', (await new Session().post('/api/auth/email/verify', { code: '123456' })).status === 401);
-  const badVerify = await student.post('/api/auth/email/verify', { code: emailCode === '000000' ? '111111' : '000000' });
+
+  const badToken = await student.post('/api/auth/register/confirm', { pending: 'garbage', code: emailCode ?? '000000' });
+  check('испорченный билет регистрации отклонён', badToken.status === 410, badToken.body);
+
+  const badVerify = await student.post('/api/auth/register/confirm', {
+    pending: pendingToken,
+    code: emailCode === '000000' ? '111111' : '000000',
+  });
   check(
     'неверный код отклонён с числом попыток',
     badVerify.status === 400 && String(badVerify.body?.error).includes('Осталось попыток'),
     badVerify.body,
   );
-  const malformedCode = await student.post('/api/auth/email/verify', { code: '12ab' });
+  if (badVerify.body?.pending) pendingToken = badVerify.body.pending;
+
+  const malformedCode = await student.post('/api/auth/register/confirm', { pending: pendingToken, code: '12ab' });
   check('код не из шести цифр отклонён', malformedCode.status === 400 && !!malformedCode.body?.fields?.code, malformedCode.body);
+
+  const registered = await student.post('/api/auth/register/confirm', { pending: pendingToken, code: emailCode });
+  check('регистрация подтверждается кодом', registered.status === 201, registered.body);
+
+  const meAfter = await student.request('/api/auth/me');
+  const studentId = meAfter.body.session?.profileId as string;
+  check('почта подтверждена сразу вместе с кодом регистрации', meAfter.body?.account?.emailVerified === true, meAfter.body?.account);
 
   const weakPassword = await new Session().post('/api/auth/register', {
     fullName: 'Тест Тестов',
@@ -217,9 +231,9 @@ async function main() {
   check('регистрация без согласия на ПДн отвергнута', noConsent.status === 400 && !!noConsent.body?.fields?.consent, noConsent.body);
   check('регистрация без пользовательского соглашения отвергнута', noConsent.status === 400 && !!noConsent.body?.fields?.terms, noConsent.body);
 
-  // Регистрация сама выдаёт сессию, поэтому «зарегистрировался» ещё не
-  // значит «сможет войти». Ровно этот путь — выйти и войти снова — не
-  // проверялся вовсе, и сломайся хеширование пароля на одной из сторон,
+  // Подтверждение кода само выдаёт сессию, поэтому «подтвердил код» ещё не
+  // значит «сможет войти снова». Ровно этот путь — выйти и войти заново —
+  // не проверялся вовсе, и сломайся хеширование пароля на одной из сторон,
   // все проверки выше остались бы зелёными.
   const relogin = await new Session().post('/api/auth/login', { email, password: 'Smoke12345!' });
   check('после регистрации можно войти заново', relogin.status === 200, relogin.body);
@@ -343,15 +357,17 @@ async function main() {
   });
   const approvedDoc = await hr.patch('/api/admin/students', { studentId, studyDecision: 'APPROVE' });
   check('HR подтверждает учёбу по справке', approvedDoc.status === 200 && approvedDoc.body?.studyVerified === true, approvedDoc.body);
-  check('без подтверждённой почты отклик всё ещё ждёт', approvedDoc.body?.released === 0, approvedDoc.body);
+  // Почта подтверждена ещё при регистрации (кодом) — единственное, чего
+  // ждал отклик, это подтверждение учёбы, и оно только что случилось
+  check('отклик уходит работодателю сразу после подтверждения учёбы — почта уже подтверждена при регистрации', approvedDoc.body?.released === 1, approvedDoc.body);
   const rejectMail = await lastMail(email, 'Справку об обучении');
   check('письмо о возвращённой справке пришло с причиной', !!rejectMail?.text.includes('Нечитаемый скан'), rejectMail?.subject);
   check('письмо «учёба подтверждена» пришло', !!(await lastMail(email, 'Учёба подтверждена')));
-  const verified = await student.post('/api/auth/email/verify', { code: emailCode });
-  check('верный код подтверждает почту', verified.status === 200 && verified.body?.verified === true, verified.body);
-  check('ожидавший отклик ушёл работодателю после подтверждения почты', verified.body?.released === 1, verified.body);
-  check('почта подтверждена', (await student.request('/api/auth/me')).body?.account?.emailVerified === true);
-  check('повторный ввод кода не ломает подтверждение', (await student.post('/api/auth/email/verify', { code: emailCode })).status === 200);
+  // Эндпойнт /api/auth/email/verify остаётся для старых, ещё не подтверждённых
+  // учётных записей — на уже подтверждённой он должен молча отвечать успехом,
+  // а не ломаться и не выпускать отклик повторно
+  const verifiedAgain = await student.post('/api/auth/email/verify', { code: emailCode ?? '000000' });
+  check('повторный ввод кода на уже подтверждённой почте не ломается', verifiedAgain.status === 200 && verifiedAgain.body?.verified === true, verifiedAgain.body);
   if (secondDoc.body.url) check('проверенная справка удалена с сервера', (await hr.request(secondDoc.body.url)).status === 404);
 
   const applications = await student.request('/api/applications');
@@ -653,13 +669,15 @@ async function main() {
     resumeName: null,
     phone: '+7 900 555-44-33',
   };
-  const ownerCreated = await owner.post('/api/auth/register', {
+  const ownerStarted = await owner.post('/api/auth/register', {
     ...ownerProfile,
     email: ownerEmail,
     password: 'Smoke12345!',
     consent: true,
     terms: true,
   });
+  const ownerCode = codeFrom(await lastMail(ownerEmail, 'Код подтверждения'));
+  const ownerCreated = await owner.post('/api/auth/register/confirm', { pending: ownerStarted.body?.pending, code: ownerCode });
   check('студент для проверки профиля заведён', ownerCreated.status === 201, ownerCreated.body);
 
   const minor = await new Session().post('/api/auth/register', {
@@ -841,7 +859,7 @@ async function main() {
     password: 'Smoke12345!',
   });
   check('войти в удалённый профиль нельзя', afterErase.status === 401, afterErase.status);
-  const reRegister = await new Session().post('/api/auth/register', {
+  const reRegisterStarted = await new Session().post('/api/auth/register', {
     ...ownerProfile,
     email: ownerEmail,
     password: 'Smoke12345!',
@@ -850,10 +868,15 @@ async function main() {
   });
   // Почта освобождается вместе с данными: иначе удалённый человек не
   // смог бы вернуться, а его адрес так и остался бы лежать в базе
-  check('после удаления почту можно занять снова', reRegister.status === 201, reRegister.body);
-  if (reRegister.status === 201) {
+  check('после удаления почту можно занять снова', reRegisterStarted.status === 201 && !!reRegisterStarted.body?.pending, reRegisterStarted.body);
+  if (reRegisterStarted.body?.pending) {
+    const reRegisterCode = codeFrom(await lastMail(ownerEmail, 'Код подтверждения'));
     const again = new Session();
-    await again.post('/api/auth/login', { email: ownerEmail, password: 'Smoke12345!' });
+    const reRegisterConfirmed = await again.post('/api/auth/register/confirm', {
+      pending: reRegisterStarted.body.pending,
+      code: reRegisterCode,
+    });
+    check('повторная регистрация подтверждается кодом', reRegisterConfirmed.status === 201, reRegisterConfirmed.body);
     await again.delete('/api/students/me', {});
   }
 
@@ -876,11 +899,16 @@ async function main() {
     terms: true,
   };
   const company = new Session();
-  const companyReg = await company.post('/api/auth/register/company', companyData);
-  check('компания регистрируется сама', companyReg.status === 201, companyReg.body);
-  check('новая компания на модерации', companyReg.body?.moderationStatus === 'PENDING', companyReg.body);
+  const companyStarted = await company.post('/api/auth/register/company', companyData);
+  check('компания регистрируется сама: код отправлен', companyStarted.status === 201 && !!companyStarted.body?.pending, companyStarted.body);
   const companyCode = codeFrom(await lastMail(companyEmail, 'Код подтверждения'));
   check('компании пришёл код подтверждения почты', !!companyCode);
+  const companyReg = await company.post('/api/auth/register/company/confirm', {
+    pending: companyStarted.body?.pending,
+    code: companyCode,
+  });
+  check('компания подтверждает код и получает кабинет', companyReg.status === 201, companyReg.body);
+  check('новая компания на модерации', companyReg.body?.moderationStatus === 'PENDING', companyReg.body);
 
   const companyNoConsent = await new Session().post('/api/auth/register/company', {
     ...companyData,
@@ -1035,16 +1063,10 @@ async function main() {
   );
   if (vacancyPhoto) check('фото черновика гостю не отдаётся', (await fetch(`${BASE}${vacancyPhoto}`)).status === 404);
 
-  const blockedSubmit = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'submit' });
-  check(
-    'без подтверждённой почты вакансия на проверку не уходит',
-    blockedSubmit.status === 403 && blockedSubmit.body?.code === 'EMAIL_NOT_VERIFIED',
-    blockedSubmit.body,
-  );
-  const companyVerified = await company.post('/api/auth/email/verify', { code: companyCode });
-  check('компания подтверждает почту', companyVerified.status === 200 && companyVerified.body?.verified === true, companyVerified.body);
+  // Почта компании подтверждена ещё кодом при регистрации — подача на
+  // проверку ничего дополнительно не ждёт
   const submitted = await company.post(`/api/employer/vacancies/${vacancyId}`, { action: 'submit' });
-  check('вакансия уходит на проверку', submitted.status === 200 && submitted.body?.status === 'PENDING', submitted.body);
+  check('вакансия уходит на проверку — почта уже подтверждена при регистрации', submitted.status === 200 && submitted.body?.status === 'PENDING', submitted.body);
 
   const inFeed = async () => {
     const feed = await student.request('/api/feed');
@@ -1299,9 +1321,21 @@ async function main() {
     const now = Math.floor(Date.now() / 1000);
     const body = Buffer.from(
       JSON.stringify({
-        v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', sub: 'usr_smoke', email: `smoke-${Date.now() + 4242}@demo.ru`,
+        v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', kind: 'staff', sub: 'usr_smoke', email: `smoke-${Date.now() + 4242}@demo.ru`,
         name: 'Сотрудник Проверкин', position: 'Администратор', permissions: ['students'], iat: now, exp: now + 60,
         jti: crypto.randomBytes(16).toString('base64url'), ...claims,
+      }),
+    ).toString('base64url');
+    return `${body}.${crypto.createHmac('sha256', secret || 'секрет-не-задан').update(body).digest('base64url')}`;
+  };
+  const crmClientTicket = (claims: Record<string, unknown>, secret = ssoSecret) => {
+    const now = Math.floor(Date.now() / 1000);
+    const body = Buffer.from(
+      JSON.stringify({
+        v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', kind: 'client', sub: 'usr_smoke_client',
+        crmClientId: `crm-client-smoke-${Date.now() + 4242}`, companyName: 'Смоук-клиент CRM',
+        contactName: 'Проверкина Клиентова', contactEmail: `smoke-client-${Date.now() + 4242}@demo.ru`,
+        iat: now, exp: now + 60, jti: crypto.randomBytes(16).toString('base64url'), ...claims,
       }),
     ).toString('base64url');
     return `${body}.${crypto.createHmac('sha256', secret || 'секрет-не-задан').update(body).digest('base64url')}`;
@@ -1346,6 +1380,22 @@ async function main() {
     check('поддельный билет не пускает', forged.location.includes('crm=expired'), forged.location);
     const conflict = await enterFromCrm(crmTicket({ email }));
     check('почта студента не становится входом в панель', conflict.location.includes('crm=conflict'), conflict.location);
+
+    // ---------- Вход клиента CRM: публикация вакансии без модерации ----------
+    const firstClientTicket = crmClientTicket({});
+    const clientEntered = await enterFromCrm(firstClientTicket);
+    check(
+      'клиент CRM входит сразу в форму новой вакансии',
+      [303, 307].includes(clientEntered.status) &&
+        clientEntered.location.endsWith('/employer/vacancies/new') &&
+        clientEntered.cookie.startsWith('fhr_session='),
+      clientEntered.status,
+    );
+    const clientSession = new Session();
+    (clientSession as any).cookie = clientEntered.cookie;
+    check('кабинет компании клиента CRM открыт', (await clientSession.request('/employer')).status === 200);
+    const clientReplay = await enterFromCrm(firstClientTicket);
+    check('по тому же билету клиента второй раз не войти', clientReplay.location.includes('crm=used'), clientReplay.location);
   } else {
     const notConfigured = await enterFromCrm(crmTicket({}));
     check('без секрета вход из CRM выключен', notConfigured.location.includes('crm=config'), notConfigured.location);

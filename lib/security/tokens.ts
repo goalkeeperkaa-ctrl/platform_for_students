@@ -17,6 +17,14 @@ export function hashEmailCode(accountId: string, code: string): string {
   return blindIndex(`email-code:${accountId}:${code}`);
 }
 
+/**
+ * Хеш кода для ещё не созданной учётной записи — ключ не accountId
+ * (его пока нет), а сама почта, к которой привязана заявка.
+ */
+export function hashPendingCode(email: string, code: string): string {
+  return blindIndex(`pending-code:${email.trim().toLowerCase()}:${code}`);
+}
+
 /** Токен ссылки сброса пароля: 256 бит, в ссылке — без символов, которые ломает почта. */
 export function generateResetToken(): string {
   return crypto.randomBytes(32).toString('base64url');

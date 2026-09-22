@@ -9,6 +9,7 @@ import { Logo } from '@/components/brand/Logo';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
+import { ConfirmCodeStep } from '@/components/forms/ConfirmCodeStep';
 import { ConsentChecks } from '@/components/legal/ConsentChecks';
 import { companyRegistrationSchema } from '@/lib/company';
 import { normalizeInn } from '@/lib/inn';
@@ -60,7 +61,8 @@ export function CompanyRegistrationForm() {
   const toast = useToast();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [pending, setPending] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
 
   function patch(values: Partial<FormState>) {
     setForm((current) => ({ ...current, ...values }));
@@ -87,7 +89,7 @@ export function CompanyRegistrationForm() {
       return;
     }
 
-    setPending(true);
+    setSubmitting(true);
     try {
       const response = await fetch('/api/auth/register/company', {
         method: 'POST',
@@ -95,7 +97,7 @@ export function CompanyRegistrationForm() {
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
-        redirectTo?: string;
+        pending?: string;
         error?: string;
         fields?: Record<string, string>;
       };
@@ -104,13 +106,17 @@ export function CompanyRegistrationForm() {
         toast.error(data.error ?? 'Не удалось зарегистрировать компанию');
         return;
       }
-      router.push(data.redirectTo ?? '/employer/company');
-      router.refresh();
+      setPending(data.pending ?? null);
     } catch {
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
     } finally {
-      setPending(false);
+      setSubmitting(false);
     }
+  }
+
+  function onVerified(data: { redirectTo?: string }) {
+    router.push(data.redirectTo ?? '/employer/company');
+    router.refresh();
   }
 
   return (
@@ -126,11 +132,22 @@ export function CompanyRegistrationForm() {
         </div>
 
         <div className="glass rounded-3xl p-6 sm:p-8">
+          {pending ? (
+            <ConfirmCodeStep
+              email={form.email}
+              pending={pending}
+              confirmUrl="/api/auth/register/company/confirm"
+              resendUrl="/api/auth/register/company/resend"
+              onVerified={onVerified}
+              onRestart={() => setPending(null)}
+            />
+          ) : (
+            <>
           <h1 className="text-display-sm text-paper">Регистрация компании</h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-paper-dim">
-            Кабинет откроется сразу. Студенты увидят компанию и вакансии после проверки агентством:
-            HR-менеджер сверит ИНН с госреестром и при необходимости позвонит. Это защищает студентов
-            от фейковых работодателей.
+            Кабинет откроется после подтверждения почты кодом. Студенты увидят компанию и вакансии
+            после проверки агентством: HR-менеджер сверит ИНН с госреестром и при необходимости
+            позвонит. Это защищает студентов от фейковых работодателей.
           </p>
 
           <form onSubmit={submit} className="mt-6 space-y-3" noValidate>
@@ -212,26 +229,30 @@ export function CompanyRegistrationForm() {
               />
             </div>
 
-            <Button type="submit" size="lg" loading={pending} className="mt-2 w-full" iconRight={<ArrowRight />}>
+            <Button type="submit" size="lg" loading={submitting} className="mt-2 w-full" iconRight={<ArrowRight />}>
               Зарегистрировать компанию
             </Button>
           </form>
+            </>
+          )}
         </div>
 
-        <div className="mt-6 space-y-1.5 text-center text-[13px] text-paper-faint">
-          <p>
-            Уже есть кабинет?{' '}
-            <Link href="/login" className="text-paper underline-offset-4 hover:underline">
-              Войти
-            </Link>
-          </p>
-          <p>
-            Вы студент?{' '}
-            <Link href="/register" className="text-paper underline-offset-4 hover:underline">
-              Регистрация студента
-            </Link>
-          </p>
-        </div>
+        {!pending && (
+          <div className="mt-6 space-y-1.5 text-center text-[13px] text-paper-faint">
+            <p>
+              Уже есть кабинет?{' '}
+              <Link href="/login" className="text-paper underline-offset-4 hover:underline">
+                Войти
+              </Link>
+            </p>
+            <p>
+              Вы студент?{' '}
+              <Link href="/register" className="text-paper underline-offset-4 hover:underline">
+                Регистрация студента
+              </Link>
+            </p>
+          </div>
+        )}
       </motion.div>
     </div>
   );

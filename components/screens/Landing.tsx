@@ -251,9 +251,6 @@ export function Landing({
             <Link href="/employer" className="transition-colors hover:text-paper">
               Кабинет работодателя
             </Link>
-            <Link href="/institutions" className="transition-colors hover:text-paper">
-              Учебные заведения
-            </Link>
             <Link href="/institutions/rating" className="transition-colors hover:text-paper">
               Рейтинг вузов
             </Link>
@@ -265,9 +262,6 @@ export function Landing({
             </Link>
             <Link href="/help" className="transition-colors hover:text-paper">
               Помощь
-            </Link>
-            <Link href="/login?role=admin" className="transition-colors hover:text-paper">
-              HR-менеджеру
             </Link>
           </div>
           <div className="flex items-center gap-2">

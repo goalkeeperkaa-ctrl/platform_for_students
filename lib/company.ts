@@ -32,6 +32,12 @@ export const companyFileUrlSchema = z
   .string()
   .regex(COMPANY_FILE_PATTERN, 'Загрузите изображение через форму');
 
+/** Видео компании/вакансии, загруженное файлом — тот же принцип, что и COMPANY_FILE_PATTERN. */
+export const COMPANY_VIDEO_FILE_PATTERN = /^\/api\/files\/companyVideo\/[0-9a-f-]{36}\.(mp4|webm)$/i;
+
+/** Ссылка на видео: внешняя (YouTube и т.п.) или файл, загруженный через форму. */
+export const companyVideoUrlSchema = z.union([httpUrlSchema, z.string().regex(COMPANY_VIDEO_FILE_PATTERN)]);
+
 const companyName = z
   .string()
   .trim()
@@ -71,7 +77,7 @@ export const companyProfileSchema = z.object({
   city: optionalText(80),
   socials: z.array(linkItemSchema).max(8, 'Не больше 8 ссылок'),
   photos: z.array(companyFileUrlSchema).max(6, 'Не больше 6 фото'),
-  videoUrl: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
+  videoUrl: z.preprocess(emptyToNull, companyVideoUrlSchema.nullable()),
   // Телефон и ИНН — не для страницы, а для проверки агентством. Правило
   // «ИНН проверенной компании не меняется» — в роуте: схема не знает статус
   phone: phoneSchema,
@@ -118,6 +124,8 @@ export function readCompanyProfile(row: {
     typeof value === 'string' && httpUrlSchema.safeParse(value).success ? value : null;
   const file = (value: unknown) =>
     typeof value === 'string' && COMPANY_FILE_PATTERN.test(value) ? value : null;
+  const video = (value: unknown) =>
+    typeof value === 'string' && companyVideoUrlSchema.safeParse(value).success ? value : null;
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
 
   const socials: LinkItem[] = Array.isArray(row.socials)
@@ -144,7 +152,7 @@ export function readCompanyProfile(row: {
     city: text(row.city),
     socials,
     photos,
-    videoUrl: url(row.videoUrl),
+    videoUrl: video(row.videoUrl),
   };
 }
 

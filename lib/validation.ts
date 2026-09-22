@@ -316,6 +316,21 @@ export const UPLOAD_LIMITS = {
     mime: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
     label: 'PDF, JPG, PNG или WebP до 8 МБ',
   },
+  // Видео о компании и видео вакансии — публичные, льёт работодатель.
+  // Тот же бакет для обоих, как и с company-фото: у вакансии нет своего
+  // владельца отдельно от компании.
+  companyVideo: {
+    maxBytes: 50 * 1024 * 1024,
+    mime: ['video/mp4', 'video/webm'],
+    label: 'MP4 или WebM до 50 МБ',
+  },
+  // Видео-визитка студента. Видит сам студент и те, кому он откликнулся —
+  // как фото и резюме, поэтому отдельный вид, а не companyVideo.
+  studentVideo: {
+    maxBytes: 50 * 1024 * 1024,
+    mime: ['video/mp4', 'video/webm'],
+    label: 'MP4 или WebM до 50 МБ',
+  },
 } as const;
 
 export type UploadKind = keyof typeof UPLOAD_LIMITS;

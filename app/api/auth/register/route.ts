@@ -1,18 +1,20 @@
-import { cookies } from 'next/headers';
 import { fail, handle, ok, tooManyRequests } from '@/lib/api';
-import { getStore, isAccountExistsError } from '@/lib/db';
-import { STUDENT_CONSENT_VERSION, TERMS_VERSION } from '@/lib/legal';
-import { audit, assertSameOrigin } from '@/lib/security/guards';
+import { getStore } from '@/lib/db';
+import { issuePendingRegistration, type PendingStudentData } from '@/lib/pending-registration';
+import { blindIndex } from '@/lib/security/crypto';
+import { assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
-import { HOME_BY_ROLE, SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
 import { registrationSchema } from '@/lib/validation';
-import { track } from '@/lib/analytics';
-import { sendEmailCode } from '@/lib/account-email';
-import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
-import type { SessionUser } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
+/**
+ * Регистрация студента, шаг 1: форма проверена, код отправлен.
+ *
+ * Учётная запись заводится только после верного кода (.../register/confirm).
+ * Опечатка в почте на этом шаге не занимает адрес навсегда, как занимала
+ * бы созданная сразу, но неподтверждённая учётная запись.
+ */
 export async function POST(request: Request) {
   return handle(async () => {
     assertSameOrigin(request);
@@ -33,67 +35,23 @@ export async function POST(request: Request) {
       });
     }
 
-    try {
-      const { account, student } = await store.students.createWithAccount({
-        email: input.email,
-        password: input.password,
-        fullName: input.fullName,
-        phone: input.phone,
-        gender: input.gender,
-        birthYear: Number(input.birthDate.slice(0, 4)),
-        birthDate: input.birthDate,
-        photoUrl: input.photoUrl,
-        resumeUrl: input.resumeUrl,
-        resumeName: input.resumeName,
-        university: institution ? (institution.shortName ?? institution.name) : input.university,
-        institutionId: institution?.id ?? null,
-        speciality: input.speciality,
-        studyYear: input.studyYear,
-        city: input.city,
-        workDays: input.workDays,
-        hoursPerWeek: input.hoursPerWeek,
-        skills: input.skills,
-        about: input.about,
-        lookingFor: input.lookingFor,
-        consentVersion: STUDENT_CONSENT_VERSION,
-        consentIp: ip,
-        termsVersion: TERMS_VERSION,
-        marketingConsent: input.marketing,
+    // Почта проверяется до отправки кода: иначе письмо ушло бы на адрес,
+    // который уже занят, а человек узнал бы об этом только после ввода кода
+    const existing = await store.accounts.findByEmailHash(blindIndex(input.email));
+    if (existing) {
+      return fail(409, 'Аккаунт с такой почтой уже зарегистрирован', 'EMAIL_TAKEN', {
+        email: 'Эта почта уже занята',
       });
-
-      const session: SessionUser = {
-        accountId: account.id,
-        role: 'STUDENT',
-        profileId: student.id,
-        name: input.fullName,
-      };
-      cookies().set(SESSION_COOKIE, await signSession(session), sessionCookieOptions);
-
-      // Согласие на обработку ПДн фиксируется отдельным событием: это
-      // юридический факт, а не деталь регистрации.
-      await audit(session, {
-        action: 'consent.granted',
-        entity: 'Student',
-        entityId: student.id,
-        meta: { version: STUDENT_CONSENT_VERSION, terms: TERMS_VERSION, marketing: input.marketing },
-      }, request.headers);
-      await audit(session, { action: 'student.registered', entity: 'Student', entityId: student.id }, request.headers);
-      await track('student.registered', { studentId: student.id });
-      // Код подтверждения — сразу. Сбой почты регистрацию не отменяет:
-      // код можно запросить заново из кабинета
-      await sendEmailCode(account.id).catch((error: unknown) => console.error('[почта] код не отправлен:', error));
-      if (profileCompleteness(student).percent >= COMPLETE_PROFILE_PERCENT) {
-        await track('student.profile.completed', { studentId: student.id });
-      }
-
-      return ok({ redirectTo: HOME_BY_ROLE.STUDENT }, { status: 201 });
-    } catch (err) {
-      if (isAccountExistsError(err)) {
-        return fail(409, 'Аккаунт с такой почтой уже зарегистрирован', 'EMAIL_TAKEN', {
-          email: 'Эта почта уже занята',
-        });
-      }
-      throw err;
     }
+
+    const data: PendingStudentData = {
+      ...input,
+      university: institution ? (institution.shortName ?? institution.name) : input.university,
+      institutionId: institution?.id ?? null,
+      consentIp: ip,
+    };
+
+    const { token, delivered } = await issuePendingRegistration('student', input.email, data);
+    return ok({ pending: token, delivered }, { status: 201 });
   });
 }

@@ -269,6 +269,10 @@ export function createPrismaStore(): DataStore {
         const row = await prisma.employer.findUnique({ where: { id } });
         return row ? toEmployerRecord(row) : null;
       },
+      async findByInn(inn) {
+        const row = await prisma.employer.findUnique({ where: { inn } });
+        return row ? toEmployerRecord(row) : null;
+      },
       async list() {
         const rows = await prisma.employer.findMany({ orderBy: { companyName: 'asc' } });
         return rows.map(toEmployerRecord);
@@ -354,6 +358,29 @@ export function createPrismaStore(): DataStore {
         });
         return toEmployerRecord(row);
       },
+      async ensureForCrmClient(input) {
+        const row = await prisma.employer.upsert({
+          where: { crmClientId: input.crmClientId },
+          // Ничего не меняем: имя и контакт компании ведёт синк вакансий
+          // из CRM, а не то, кто из сотрудников клиента зашёл первым
+          update: {},
+          create: {
+            companyName: input.companyName,
+            contactName: input.contactName,
+            crmClientId: input.crmClientId,
+            account: {
+              create: {
+                role: 'EMPLOYER',
+                emailEnc: encrypt(input.contactEmail),
+                emailHash: blindIndex(input.contactEmail),
+                // Клиента заводит агентство по договору — его почта уже проверена
+                emailVerifiedAt: new Date(),
+              },
+            },
+          },
+        });
+        return toEmployerRecord(row);
+      },
     },
 
     vacancies: {
@@ -382,6 +409,10 @@ export function createPrismaStore(): DataStore {
       },
       async listByPhoto(url) {
         const rows = await prisma.vacancy.findMany({ where: { photos: { has: url } } });
+        return rows.map(toVacancyRecord);
+      },
+      async listByVideo(url) {
+        const rows = await prisma.vacancy.findMany({ where: { videoUrl: url } });
         return rows.map(toVacancyRecord);
       },
       async create(input) {

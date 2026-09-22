@@ -30,18 +30,19 @@ export async function POST(request: Request) {
     // Файлы компании раздаются публично, поэтому загружать их может только
     // вошедший работодатель. Без этого кто угодно складывал бы на сервер
     // картинки, которые потом открываются без входа.
-    if (kind === 'company') {
+    if (kind === 'company' || kind === 'companyVideo') {
       const session = await getSession();
       if (!session || session.role !== 'EMPLOYER') {
-        return fail(401, 'Загружать изображения компании может только её кабинет', 'UNAUTHORIZED');
+        return fail(401, 'Загружать медиафайлы компании может только её кабинет', 'UNAUTHORIZED');
       }
     }
     // Справку прикладывает студент из профиля: она привязывается к учётной
-    // записи, и без входа ей не к чему привязаться
-    if (kind === 'study') {
+    // записи, и без входа ей не к чему привязаться. Видео-визитка — из
+    // того же кабинета, по той же причине.
+    if (kind === 'study' || kind === 'studentVideo') {
       const session = await getSession();
       if (!session || session.role !== 'STUDENT') {
-        return fail(401, 'Справку загружает студент из своего профиля', 'UNAUTHORIZED');
+        return fail(401, 'Загружает студент из своего профиля', 'UNAUTHORIZED');
       }
     }
     if (!(file instanceof File)) {

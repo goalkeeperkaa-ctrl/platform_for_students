@@ -17,6 +17,7 @@ import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { ScheduleFields } from '@/components/forms/ScheduleFields';
 import { SkillsInput } from '@/components/forms/SkillsInput';
 import { UniversityInput } from '@/components/forms/UniversityInput';
+import { VideoUpload } from '@/components/forms/VideoUpload';
 import { StudyDocumentCard } from '@/components/student/StudyDocumentCard';
 import { StudyVerificationNote } from '@/components/student/StudyVerificationNote';
 import { durations, easeOutExpo } from '@/lib/motion';
@@ -597,16 +598,19 @@ export function ProfileEditor({
             Добавить ссылку
           </AddButton>
 
-          <div className="mt-6">
-            <TextField
-              label="Видео-визитка"
-              type="url"
-              inputMode="url"
-              value={form.videoUrl}
-              error={errors.videoUrl}
-              hint="Необязательно. Ссылка на видео: VK Видео, YouTube, Яндекс Диск."
-              onChange={(e) => patch({ videoUrl: e.target.value })}
-            />
+          <div className="mt-6 space-y-3">
+            {!form.videoUrl.startsWith('/api/files/studentVideo/') && (
+              <TextField
+                label="Видео-визитка"
+                type="url"
+                inputMode="url"
+                value={form.videoUrl}
+                error={errors.videoUrl}
+                hint="Необязательно. Ссылка на видео: VK Видео, YouTube, Яндекс Диск — или загрузите файл ниже."
+                onChange={(e) => patch({ videoUrl: e.target.value })}
+              />
+            )}
+            <VideoUpload kind="studentVideo" value={form.videoUrl} onChange={(url) => patch({ videoUrl: url })} />
           </div>
         </Section>
 

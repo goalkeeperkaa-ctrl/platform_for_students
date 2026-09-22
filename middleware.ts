@@ -41,8 +41,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Вошедшему на форме входа делать нечего
-  if ((pathname === '/login' || pathname === '/register' || pathname.startsWith('/register/')) && session) {
+  // Вошедшему на форме входа делать нечего, и на витрину каждый раз
+  // заново тоже — уже открывший однажды кабинет должен сразу попадать
+  // в него, а не листать главную страницу до тех пор, пока сам не выйдет
+  if (
+    (pathname === '/' ||
+      pathname === '/login' ||
+      pathname === '/register' ||
+      pathname.startsWith('/register/')) &&
+    session
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = HOME_BY_ROLE[session.role];
     url.search = '';

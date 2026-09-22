@@ -690,6 +690,9 @@ export async function createMemoryStore(): Promise<DataStore> {
       async findById(id) {
         return clone(t.employers.find((e) => e.id === id) ?? null);
       },
+      async findByInn(inn) {
+        return clone(t.employers.find((e) => e.inn === inn) ?? null);
+      },
       async list() {
         return clone(t.employers);
       },
@@ -763,6 +766,40 @@ export async function createMemoryStore(): Promise<DataStore> {
         employer.moderatedAt = status === 'PENDING' ? null : now();
         return clone(employer);
       },
+      async ensureForCrmClient(input) {
+        const existing = t.employers.find((e) => e.crmClientId === input.crmClientId);
+        if (existing) return clone(existing);
+
+        const account: AccountRecord = {
+          id: randomUUID(),
+          role: 'EMPLOYER',
+          emailEnc: encrypt(input.contactEmail),
+          emailHash: blindIndex(input.contactEmail),
+          passwordHash: null,
+          isActive: true,
+          lastLoginAt: null,
+          termsVersion: null,
+          termsAcceptedAt: null,
+          marketingConsentAt: null,
+          tourSeenAt: null,
+          emailVerifiedAt: now(),
+          notifyEmail: true,
+          createdAt: now(),
+        };
+        const employer: EmployerRecord = {
+          id: randomUUID(),
+          accountId: account.id,
+          companyName: input.companyName,
+          contactName: input.contactName,
+          logoUrl: null,
+          crmClientId: input.crmClientId,
+          ...structuredClone(EMPTY_COMPANY),
+          createdAt: now(),
+        };
+        t.accounts.push(account);
+        t.employers.push(employer);
+        return clone(employer);
+      },
     },
 
     vacancies: {
@@ -792,6 +829,9 @@ export async function createMemoryStore(): Promise<DataStore> {
       },
       async listByPhoto(url) {
         return clone(t.vacancies.filter((v) => v.photos.includes(url)));
+      },
+      async listByVideo(url) {
+        return clone(t.vacancies.filter((v) => v.videoUrl === url));
       },
       async create(input) {
         const vacancy: VacancyRecord = {

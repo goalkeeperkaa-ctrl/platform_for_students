@@ -19,8 +19,10 @@ type Variant = 'primary' | 'accent' | 'ghost' | 'outline' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
-  primary:
-    'bg-paper text-ink shadow-[0_8px_24px_-8px_rgba(248,248,248,0.35)] hover:bg-white',
+  // hover:bg-white ломался в светлой теме: paper там тёмный, а этот hover
+  // был буквальным белым независимо от темы — кнопка на наведении становилась
+  // белой с белым (ink) текстом. opacity-90 работает верно в обеих темах.
+  primary: 'bg-paper text-ink shadow-[0_8px_24px_-8px_var(--shadow-button-primary)] hover:opacity-90',
   accent:
     'bg-gradient-to-b from-accent-500 to-accent-600 text-paper shadow-glow-accent hover:from-accent-400 hover:to-accent-500',
   ghost: 'bg-transparent text-paper/80 hover:bg-paper/[0.06] hover:text-paper',

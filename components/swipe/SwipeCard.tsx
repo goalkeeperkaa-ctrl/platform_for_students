@@ -221,6 +221,13 @@ export function SwipeCard({
         />
 
         <div className="relative flex h-full flex-col p-6 sm:p-7">
+          {/*
+            Имя и город компании лежат на companyGradient (см. выше) — он
+            всегда тёмный независимо от темы страницы, поэтому текст здесь
+            тоже фиксированный светлый, а не paper: тот в светлой теме
+            становится тёмным и пропадает на этой подложке (тот же баг,
+            что был с инициалами в Avatar).
+          */}
           <header className="flex items-start gap-3.5">
             <Avatar
               name={vacancy.company}
@@ -229,8 +236,8 @@ export function SwipeCard({
               rounded="square"
             />
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className="truncate text-[13.5px] font-medium text-paper/85">{vacancy.company}</p>
-              <p className="mt-0.5 flex items-center gap-1 truncate text-[12.5px] text-paper-faint">
+              <p className="truncate text-[13.5px] font-medium text-white/90">{vacancy.company}</p>
+              <p className="mt-0.5 flex items-center gap-1 truncate text-[12.5px] text-white/60">
                 <MapPin className="size-3 shrink-0" aria-hidden />
                 {vacancy.city}
                 {vacancy.district ? `, ${vacancy.district}` : ''}

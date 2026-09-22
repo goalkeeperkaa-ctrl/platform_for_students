@@ -58,8 +58,10 @@ export function MatchRing({
           transition={{ duration: 1.1, ease: easeOutExpo, delay: 0.15 }}
         />
       </svg>
+      {/* Кольцо всегда лежит на тёмной подложке-баннере компании (см.
+          SwipeCard/VacancyDetail) — фиксированный белый, не paper. */}
       <span
-        className="absolute font-medium tabular-nums leading-none text-paper"
+        className="absolute font-medium tabular-nums leading-none text-white"
         style={{ fontSize: size * 0.29 }}
       >
         {Math.round(value)}

@@ -220,9 +220,20 @@ function signTicket(claims: Record<string, unknown>, secret = ssoSecret): string
   const now = Math.floor(Date.now() / 1000);
   const body = Buffer.from(
     JSON.stringify({
-      v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', sub: 'usr_1', email: 'Staff@Agency.ru',
+      v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', kind: 'staff', sub: 'usr_1', email: 'Staff@Agency.ru',
       name: 'Анна', position: 'Администратор', permissions: ['students'], iat: now, exp: now + 60,
       jti: 'j'.repeat(22), ...claims,
+    }),
+  ).toString('base64url');
+  return `${body}.${crypto.createHmac('sha256', secret).update(body).digest('base64url')}`;
+}
+function signClientTicket(claims: Record<string, unknown>, secret = ssoSecret): string {
+  const now = Math.floor(Date.now() / 1000);
+  const body = Buffer.from(
+    JSON.stringify({
+      v: 1, iss: 'fattakhov-crm', aud: 'fattakhov-students', kind: 'client', sub: 'usr_client_1',
+      crmClientId: 'client_a', companyName: 'Кофейни «Север»', contactName: 'Анна',
+      contactEmail: 'Anna@Sever.ru', iat: now, exp: now + 60, jti: 'j'.repeat(22), ...claims,
     }),
   ).toString('base64url');
   return `${body}.${crypto.createHmac('sha256', secret).update(body).digest('base64url')}`;
@@ -230,10 +241,24 @@ function signTicket(claims: Record<string, unknown>, secret = ssoSecret): string
 test('верный билет из CRM принимается, почта — в нижнем регистре', () => {
   const result = verifyStaffTicket(signTicket({}), ssoSecret);
   assert.equal(result.ok, true);
-  if (result.ok) {
+  if (result.ok && result.ticket.kind === 'staff') {
     assert.equal(result.ticket.email, 'staff@agency.ru');
     assert.deepEqual(result.ticket.permissions, ['students']);
   }
+});
+test('билет клиента CRM принимается, почта — в нижнем регистре', () => {
+  const result = verifyStaffTicket(signClientTicket({}), ssoSecret);
+  assert.equal(result.ok, true);
+  if (result.ok && result.ticket.kind === 'client') {
+    assert.equal(result.ticket.crmClientId, 'client_a');
+    assert.equal(result.ticket.companyName, 'Кофейни «Север»');
+    assert.equal(result.ticket.contactEmail, 'anna@sever.ru');
+  }
+});
+test('билет клиента без crmClientId или компании не проходит', () => {
+  assert.equal(verifyStaffTicket(signClientTicket({ crmClientId: '' }), ssoSecret).ok, false);
+  assert.equal(verifyStaffTicket(signClientTicket({ companyName: '' }), ssoSecret).ok, false);
+  assert.equal(verifyStaffTicket(signClientTicket({ contactEmail: 'не почта' }), ssoSecret).ok, false);
 });
 test('чужая подпись, истёкший срок, чужой адресат и мусор не проходят', () => {
   assert.deepEqual(verifyStaffTicket(signTicket({}, 'x'.repeat(40)), ssoSecret), { ok: false, reason: 'SIGNATURE' });

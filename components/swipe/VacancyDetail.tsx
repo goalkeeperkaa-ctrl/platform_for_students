@@ -110,20 +110,27 @@ export function VacancyDetail({
             </button>
 
             <div className="relative overflow-y-auto overscroll-contain px-6 pb-6 pt-6 sm:px-8">
+              {/*
+                Имя и город компании лежат на companyGradient (см. выше) —
+                он всегда тёмный независимо от темы страницы, поэтому текст
+                здесь тоже фиксированный светлый, а не paper: тот в светлой
+                теме становится тёмным и пропадает на этой подложке (тот же
+                баг, что был с инициалами в Avatar).
+              */}
               <header className="flex items-start gap-4">
                 <Avatar name={vacancy.company} src={vacancy.companyLogoUrl} size={52} rounded="square" />
                 <div className="min-w-0 flex-1">
                   {vacancy.companyId ? (
                     <Link
                       href={`/companies/${vacancy.companyId}`}
-                      className="text-[14px] font-medium text-paper/85 underline-offset-4 transition-colors hover:text-paper hover:underline"
+                      className="text-[14px] font-medium text-white/90 underline-offset-4 transition-colors hover:text-white hover:underline"
                     >
                       {vacancy.company}
                     </Link>
                   ) : (
-                    <p className="text-[14px] font-medium text-paper/85">{vacancy.company}</p>
+                    <p className="text-[14px] font-medium text-white/90">{vacancy.company}</p>
                   )}
-                  <p className="mt-1 flex items-center gap-1.5 text-[13px] text-paper-faint">
+                  <p className="mt-1 flex items-center gap-1.5 text-[13px] text-white/60">
                     <MapPin className="size-3.5" aria-hidden />
                     {vacancy.city}
                     {vacancy.district ? `, ${vacancy.district}` : ''}
@@ -219,6 +226,11 @@ export function VacancyDetail({
                     </div>
                   ))}
                 </section>
+              )}
+
+              {vacancy.videoUrl && vacancy.videoUrl.startsWith('/api/files/companyVideo/') && (
+                // eslint-disable-next-line jsx-a11y/media-has-caption -- видео о вакансии без субтитров
+                <video src={vacancy.videoUrl} controls className="mt-7 w-full max-w-sm rounded-2xl border border-[var(--hairline)]" />
               )}
 
               {vacancy.videoUrl && /^https?:\/\//i.test(vacancy.videoUrl) && (

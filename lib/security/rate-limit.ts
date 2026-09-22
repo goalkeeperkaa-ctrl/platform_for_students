@@ -52,6 +52,9 @@ export const RATE_LIMITS = {
   emailCode: { limit: 6, windowSeconds: 900 },
   // Ввод кода: пять ошибок гасят код, лимит — от перебора со свежими кодами
   emailVerify: { limit: 30, windowSeconds: 900 },
+  // Код для ещё не созданной учётной записи — тот же характер, что у emailVerify
+  registerConfirm: { limit: 30, windowSeconds: 900 },
+  registerResend: { limit: 6, windowSeconds: 900 },
   // Сброс пароля: на адрес — с запасом на общий NAT, на почту — как у входа
   passwordResetIp: { limit: 20, windowSeconds: 3600 },
   passwordReset: { limit: 5, windowSeconds: 3600 },

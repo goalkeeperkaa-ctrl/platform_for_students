@@ -4,9 +4,11 @@ import { NavTabs, type NavItem } from './NavTabs';
 import { UserMenu } from './UserMenu';
 import { PageTransition } from '@/components/motion/PageTransition';
 import { maskEmail } from '@/lib/account-codes';
+import { agencySiteUrl } from '@/lib/agency';
 import { getStore } from '@/lib/db';
 import { decryptSafe } from '@/lib/security/crypto';
 import { getSession } from '@/lib/security/guards';
+import type { SessionUser } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 /**
@@ -31,7 +33,9 @@ export async function AppShell({
   children: React.ReactNode;
   wide?: boolean;
 }) {
-  const unverifiedEmail = await pendingEmail();
+  const session = await getSession();
+  const unverifiedEmail = await pendingEmail(session);
+  const backToCrmUrl = await backToCrm(session);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -47,7 +51,7 @@ export async function AppShell({
           {nav && <NavTabs items={nav} className="hidden md:flex" />}
 
           {user ? (
-            <UserMenu name={user.name} subtitle={user.subtitle} href={user.href} />
+            <UserMenu name={user.name} subtitle={user.subtitle} href={user.href} backToCrmUrl={backToCrmUrl} />
           ) : (
             <span className="text-[12.5px] text-paper-faint">Fattakhov HR Agency</span>
           )}
@@ -69,10 +73,31 @@ export async function AppShell({
 }
 
 /** Почта студента или компании, которую ещё нужно подтвердить, — маской; null — нечего. */
-async function pendingEmail(): Promise<string | null> {
-  const session = await getSession();
+async function pendingEmail(session: SessionUser | null): Promise<string | null> {
   if (!session || session.role === 'ADMIN') return null;
   const account = await (await getStore()).accounts.findById(session.accountId);
   if (!account || account.emailVerifiedAt) return null;
   return maskEmail(decryptSafe(account.emailEnc));
+}
+
+/**
+ * Ссылка «Открыть CRM» — только тем, кто пришёл именно из CRM: сотруднику
+ * агентства по билету (у него есть `permissions`, у учётки admin:create
+ * этого поля нет вовсе) и представителю клиента CRM (у его компании
+ * заполнен `crmClientId`). Самостоятельно зарегистрированному работодателю
+ * или студенту возвращаться некуда.
+ */
+async function backToCrm(session: SessionUser | null): Promise<string | null> {
+  if (!session) return null;
+  const agencyUrl = agencySiteUrl();
+  if (!agencyUrl) return null;
+
+  if (session.role === 'ADMIN' && session.permissions !== undefined) return agencyUrl;
+
+  if (session.role === 'EMPLOYER') {
+    const employer = await (await getStore()).employers.findByAccountId(session.accountId);
+    if (employer?.crmClientId) return agencyUrl;
+  }
+
+  return null;
 }

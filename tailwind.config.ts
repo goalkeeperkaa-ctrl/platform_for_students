@@ -11,8 +11,25 @@ import type { Config } from 'tailwindcss';
  *
  * Зелёный существует ровно в одном месте — подсветка свайпа вправо.
  * Это не часть палитры бренда, а сигнал «действие засчитано».
+ *
+ * Светлая и тёмная тема — тот же набор ролей (ink = полотно, paper =
+ * текст, graphite/accent = ступени поверхностей), но каждая роль читает
+ * значение из CSS-переменной (см. app/globals.css, :root и .dark), а не
+ * литеральный цвет. Поэтому переключение темы не требует ни одного
+ * dark:-класса в компонентах — только смену набора переменных. Тройка
+ * чисел без rgb() — это то, что требует запись `rgb(var(--x) / <alpha>)`,
+ * благодаря ей у каждого оттенка по-прежнему работают модификаторы
+ * прозрачности вроде bg-graphite-900/50.
  */
+function withOpacity(variable: string) {
+  return ({ opacityValue }: { opacityValue?: string }) =>
+    opacityValue === undefined
+      ? `rgb(var(${variable}))`
+      : `rgb(var(${variable}) / ${opacityValue})`;
+}
+
 const config: Config = {
+  darkMode: 'class',
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
@@ -20,42 +37,48 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Тайповые определения Tailwind 3 не знают о функциях-значениях цвета
+      // (opacityValue-хелпер) — паттерн полностью официальный и рабочий
+      // в рантайме (см. документацию Tailwind по CSS-переменным для тёмной
+      // темы), просто не описан в RecursiveKeyValuePair. Приведение типа —
+      // единственная альтернатива отказу от модификаторов прозрачности
+      // вроде bg-graphite-900/50, которые используются по всему проекту.
       colors: {
         paper: {
-          DEFAULT: '#F8F8F8',
-          dim: 'rgba(248,248,248,0.62)',
-          faint: 'rgba(248,248,248,0.38)',
+          DEFAULT: withOpacity('--color-paper'),
+          dim: 'var(--color-paper-dim)',
+          faint: 'var(--color-paper-faint)',
         },
         ink: {
-          DEFAULT: '#000000',
-          raise: '#08090A',
-          deep: '#050506',
+          DEFAULT: withOpacity('--color-ink'),
+          raise: 'var(--color-ink-raise)',
+          deep: 'var(--color-ink-deep)',
         },
         graphite: {
-          950: '#0B0C0D',
-          900: '#121415',
-          850: '#181A1C',
-          800: '#1E2124',
-          750: '#26292D',
-          700: '#2F3337',
-          600: '#3D4247',
-          500: '#4E545A',
-          400: '#6B7278',
-          300: '#8D949A',
-          200: '#B4BABF',
-          100: '#D9DDE0',
+          950: withOpacity('--color-graphite-950'),
+          900: withOpacity('--color-graphite-900'),
+          850: withOpacity('--color-graphite-850'),
+          800: withOpacity('--color-graphite-800'),
+          750: withOpacity('--color-graphite-750'),
+          700: withOpacity('--color-graphite-700'),
+          600: withOpacity('--color-graphite-600'),
+          500: withOpacity('--color-graphite-500'),
+          400: withOpacity('--color-graphite-400'),
+          300: withOpacity('--color-graphite-300'),
+          200: withOpacity('--color-graphite-200'),
+          100: withOpacity('--color-graphite-100'),
         },
         accent: {
-          950: '#121A22',
-          900: '#1B2530',
-          800: '#26333F',
-          700: '#334556',
-          600: '#43596F',
-          500: '#546E88',
-          400: '#6E88A2',
-          300: '#8DA3B9',
-          200: '#B0C0D0',
-          100: '#D3DCE5',
+          950: withOpacity('--color-accent-950'),
+          900: withOpacity('--color-accent-900'),
+          800: withOpacity('--color-accent-800'),
+          700: withOpacity('--color-accent-700'),
+          600: withOpacity('--color-accent-600'),
+          500: withOpacity('--color-accent-500'),
+          400: withOpacity('--color-accent-400'),
+          300: withOpacity('--color-accent-300'),
+          200: withOpacity('--color-accent-200'),
+          100: withOpacity('--color-accent-100'),
         },
         yes: {
           DEFAULT: '#4FA37F',
@@ -68,7 +91,7 @@ const config: Config = {
         },
         warn: '#C9A227',
         danger: '#B4534F',
-      },
+      } as any,
       fontFamily: {
         sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
       },
@@ -88,12 +111,14 @@ const config: Config = {
         '4xl': '2.25rem',
       },
       boxShadow: {
-        hairline: 'inset 0 1px 0 0 rgba(248,248,248,0.07)',
-        card: '0 1px 0 0 rgba(248,248,248,0.06) inset, 0 2px 6px -1px rgba(0,0,0,0.7), 0 28px 64px -24px rgba(0,0,0,0.95)',
-        lift: '0 1px 0 0 rgba(248,248,248,0.09) inset, 0 4px 12px -2px rgba(0,0,0,0.8), 0 44px 96px -32px rgba(0,0,0,1)',
-        'glow-accent': '0 0 0 1px rgba(110,136,162,0.35), 0 8px 32px -8px rgba(84,110,136,0.55)',
+        // Значения — переменные темы (app/globals.css, :root/.dark): те же
+        // роли, разные оттенки в светлой и тёмной теме.
+        hairline: 'inset 0 1px 0 0 var(--glass-highlight)',
+        card: 'var(--shadow-card)',
+        lift: 'var(--shadow-lift)',
+        'glow-accent': '0 0 0 1px rgb(var(--color-accent-400) / 0.35), 0 8px 32px -8px rgb(var(--color-accent-500) / 0.55)',
         'glow-yes': '0 0 0 1px rgba(113,217,172,0.45), 0 12px 48px -10px rgba(79,163,127,0.5)',
-        inset: 'inset 0 1px 2px 0 rgba(0,0,0,0.6)',
+        inset: 'var(--shadow-inset)',
       },
       backdropBlur: {
         glass: '24px',

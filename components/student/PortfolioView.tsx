@@ -120,7 +120,14 @@ export function PortfolioView({ portfolio }: { portfolio: StudentPortfolio }) {
         </Block>
       )}
 
-      {(links.length > 0 || videoUrl) && (
+      {videoUrl && videoUrl.startsWith('/api/files/studentVideo/') && (
+        <Block title="Видео-визитка">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- видео-визитка без субтитров */}
+          <video src={videoUrl} controls className="w-full max-w-xs rounded-2xl border border-[var(--hairline)]" />
+        </Block>
+      )}
+
+      {(links.length > 0 || (videoUrl && isHttp(videoUrl))) && (
         <Block title="Ссылки и подтверждения">
           <div className="flex flex-wrap gap-2">
             {videoUrl && isHttp(videoUrl) && (

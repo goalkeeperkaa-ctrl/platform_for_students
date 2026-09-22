@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { BookOpen, Compass, HelpCircle, LogOut } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, Compass, HelpCircle, LogOut } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { TourController } from '@/components/onboarding/Tour';
 import { springSnappy } from '@/lib/motion';
@@ -25,7 +25,18 @@ import { cn } from '@/lib/utils';
  * лишь кабинет студента. У работодателя и администратора своей анкеты
  * нет, и кликабельное имя вело бы в никуда.
  */
-export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: string; href?: string }) {
+export function UserMenu({
+  name,
+  subtitle,
+  href,
+  backToCrmUrl,
+}: {
+  name: string;
+  subtitle?: string;
+  href?: string;
+  /** Пришёл из CRM (сотрудник агентства или представитель клиента) — вернуться туда же. */
+  backToCrmUrl?: string | null;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -88,6 +99,20 @@ export function UserMenu({ name, subtitle, href }: { name: string; subtitle?: st
         </Link>
       ) : (
         <div className={cardClass}>{card}</div>
+      )}
+
+      {backToCrmUrl && (
+        <motion.a
+          href={backToCrmUrl}
+          whileHover={{ y: -1.5 }}
+          whileTap={{ scale: 0.92 }}
+          transition={springSnappy}
+          aria-label="Открыть CRM"
+          title="Открыть CRM"
+          className={cn(roundButton, 'hover:border-paper/30 hover:text-paper')}
+        >
+          <ArrowLeftRight className="size-4" />
+        </motion.a>
       )}
 
       <div ref={helpRef} className="relative">

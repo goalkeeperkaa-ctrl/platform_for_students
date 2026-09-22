@@ -29,7 +29,13 @@ export function Avatar({
   return (
     <span
       className={cn(
-        'relative inline-flex shrink-0 items-center justify-center overflow-hidden border border-[var(--hairline)]',
+        // companyGradient всегда тёмный (см. lib/utils.ts) — независимо от
+        // темы страницы, поэтому инициалы, блик и рамка внутри тоже
+        // фиксированные светлые, а не paper/hairline: те переворачиваются
+        // в тёмный текст в светлой теме и пропадают на этой всегда-тёмной
+        // подложке (ровно баг со скриншота — «GP» было не видно).
+        'relative inline-flex shrink-0 items-center justify-center overflow-hidden border',
+        showImage ? 'border-[var(--hairline)]' : 'border-white/10',
         rounded === 'full' ? 'rounded-full' : 'rounded-2xl',
         className,
       )}
@@ -49,16 +55,21 @@ export function Avatar({
         />
       ) : (
         <span
-          className="font-medium leading-none text-paper/85"
+          className="font-medium leading-none text-white/90"
           style={{ fontSize: Math.max(11, size * 0.34) }}
         >
           {initials(name)}
         </span>
       )}
-      {/* Внутренний блик: без него аватар выглядит наклейкой поверх стекла */}
+      {/* Внутренний блик: без него аватар выглядит наклейкой поверх стекла.
+          Над инициалами — фиксированный белый: подложка там всегда тёмная,
+          в обеих темах. Над фото — обычный, зависящий от темы. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 shadow-hairline"
+        className={cn(
+          'pointer-events-none absolute inset-0',
+          showImage ? 'shadow-hairline' : 'shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]',
+        )}
         style={{ borderRadius: 'inherit' }}
       />
     </span>

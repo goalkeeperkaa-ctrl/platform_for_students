@@ -108,6 +108,11 @@ export default async function CompanyPage({ params }: Props) {
           </section>
         )}
 
+        {company.videoUrl?.startsWith('/api/files/companyVideo/') && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption -- видео о компании без субтитров
+          <video src={company.videoUrl} controls className="mt-6 w-full max-w-sm rounded-2xl border border-[var(--hairline)]" />
+        )}
+
         <section className="glass mt-6 rounded-3xl p-6 sm:p-8">
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[15px] text-paper">

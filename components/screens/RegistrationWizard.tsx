@@ -11,6 +11,7 @@ import { Chip } from '@/components/ui/Chip';
 import { TextAreaField, TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { BirthDateField } from '@/components/forms/BirthDateField';
+import { ConfirmCodeStep } from '@/components/forms/ConfirmCodeStep';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { ScheduleFields } from '@/components/forms/ScheduleFields';
@@ -118,6 +119,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
 
   const meta = STEP_META[step];
   const isLast = step === STEP_META.length - 1;
@@ -215,7 +217,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
         }),
       });
       const data = (await response.json()) as {
-        redirectTo?: string;
+        pending?: string;
         error?: string;
         fields?: Record<string, string>;
       };
@@ -226,15 +228,20 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
         return;
       }
 
-      setDone(true);
-      // Пауза ради галочки: она подтверждает, что данные приняты,
-      // и отделяет форму от ленты
-      setTimeout(() => navigate(data.redirectTo ?? '/feed'), 1250);
+      setPending(data.pending ?? null);
     } catch {
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function onVerified(data: { redirectTo?: string }) {
+    setPending(null);
+    setDone(true);
+    // Пауза ради галочки: она подтверждает, что данные приняты,
+    // и отделяет форму от ленты
+    setTimeout(() => navigate(data.redirectTo ?? '/feed'), 1250);
   }
 
   return (
@@ -262,6 +269,16 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
         <AnimatePresence mode="wait" custom={direction} initial={false}>
           {done ? (
             <SuccessState key="done" name={form.fullName} />
+          ) : pending ? (
+            <ConfirmCodeStep
+              key="pending"
+              email={form.email}
+              pending={pending}
+              confirmUrl="/api/auth/register/confirm"
+              resendUrl="/api/auth/register/resend"
+              onVerified={onVerified}
+              onRestart={() => setPending(null)}
+            />
           ) : (
             <motion.section
               key={meta.key}
@@ -285,7 +302,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
           )}
         </AnimatePresence>
 
-        {!done && (
+        {!done && !pending && (
           <div className="mt-10 flex items-center justify-between gap-3">
             <Button
               variant="ghost"

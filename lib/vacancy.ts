@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { COMPANY_FILE_PATTERN, companyFileUrlSchema } from '@/lib/company';
+import { COMPANY_FILE_PATTERN, companyFileUrlSchema, companyVideoUrlSchema } from '@/lib/company';
 import { PILOT_CITY } from '@/lib/pilot';
-import { httpUrlSchema } from '@/lib/portfolio';
 import {
   EMPLOYMENT_TYPES,
   SALARY_PERIODS,
@@ -100,7 +99,7 @@ const vacancyObject = z
       .array(companyFileUrlSchema)
       .max(VACANCY_LIMITS.photos, `Не больше ${VACANCY_LIMITS.photos} фото`)
       .transform((photos) => Array.from(new Set(photos))),
-    videoUrl: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
+    videoUrl: z.preprocess(emptyToNull, companyVideoUrlSchema.nullable()),
   });
 
 export const vacancyInputSchema = vacancyObject.superRefine((v, ctx) => {
@@ -178,7 +177,7 @@ export function readVacancyMedia<T extends { photos: string[]; videoUrl: string 
   return {
     ...row,
     photos: row.photos.filter((p) => COMPANY_FILE_PATTERN.test(p)),
-    videoUrl: row.videoUrl && httpUrlSchema.safeParse(row.videoUrl).success ? row.videoUrl : null,
+    videoUrl: row.videoUrl && companyVideoUrlSchema.safeParse(row.videoUrl).success ? row.videoUrl : null,
   };
 }
 

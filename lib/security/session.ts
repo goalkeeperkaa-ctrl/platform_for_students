@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+import { EMAIL_CODE_TTL_MINUTES } from '@/lib/account-codes';
 import { readStaffPermissions, type StaffPermission } from '@/lib/staff-permissions';
 import type { Role, SessionUser } from '@/lib/types';
 
@@ -68,6 +69,47 @@ export async function verifySession(token: string | undefined): Promise<SessionU
       name: payload.name ?? '',
       ...(permissions ? { permissions } : {}),
     };
+  } catch {
+    return null;
+  }
+}
+
+export interface PendingRegistrationClaims extends JWTPayload {
+  kind: 'student' | 'employer';
+  email: string;
+  codeHash: string;
+  attempts: number;
+  /** Когда код отправлен последний раз — для паузы между повторами. */
+  sentAt: number;
+  /** Данные формы регистрации, зашифрованные: билет возвращается клиенту и не должен возить пароль открытым текстом. */
+  payloadEnc: string;
+}
+
+/**
+ * Заявка на регистрацию до подтверждения почты.
+ *
+ * Учётная запись заводится только после верного кода — до этого её
+ * попросту нет, есть только подписанный билет с данными формы. Опечатка
+ * в почте на этом шаге не занимает адрес навсегда, как занимала бы
+ * созданная сразу, но неподтверждённая учётная запись.
+ */
+export async function signPendingRegistration(
+  claims: Omit<PendingRegistrationClaims, keyof JWTPayload>,
+): Promise<string> {
+  return new SignJWT({ ...claims })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuer(ISSUER)
+    .setIssuedAt()
+    .setExpirationTime(`${EMAIL_CODE_TTL_MINUTES * 60}s`)
+    .sign(secret());
+}
+
+/** null — билет истёк, подделан или не того вида. */
+export async function verifyPendingRegistration(token: string): Promise<PendingRegistrationClaims | null> {
+  try {
+    const { payload } = await jwtVerify<PendingRegistrationClaims>(token, secret(), { issuer: ISSUER });
+    if (!payload.kind || !payload.email || !payload.codeHash || !payload.payloadEnc) return null;
+    return payload;
   } catch {
     return null;
   }

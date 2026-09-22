@@ -516,11 +516,25 @@ export interface DataStore {
   employers: {
     findByAccountId(accountId: string): Promise<EmployerRecord | null>;
     findById(id: string): Promise<EmployerRecord | null>;
+    /** Для проверки ИНН до отправки кода регистрации — без этого письмо ушло бы впустую. */
+    findByInn(inn: string): Promise<EmployerRecord | null>;
     list(): Promise<EmployerRecord[]>;
     createWithAccount(input: NewEmployerInput): Promise<{ account: AccountRecord; employer: EmployerRecord }>;
     updateProfile(id: string, input: CompanyProfileUpdate): Promise<EmployerRecord>;
     /** Решение модерации. PENDING — вернуть на повторную проверку. */
     setModeration(id: string, input: { status: ModerationStatus; note: string | null }): Promise<EmployerRecord>;
+    /**
+     * Компания клиента CRM — заводится по первому входу так же, как и по
+     * первой вакансии из синка (crmClientId уникален и общий для обоих
+     * путей). Повторный вход ничего не перезаписывает: имя и контакт ведёт
+     * синк из CRM, а не то, кто из сотрудников клиента зашёл сейчас.
+     */
+    ensureForCrmClient(input: {
+      crmClientId: string;
+      companyName: string;
+      contactName: string;
+      contactEmail: string;
+    }): Promise<EmployerRecord>;
   };
 
   vacancies: {
@@ -539,6 +553,8 @@ export interface DataStore {
      * вакансий, и черновик не должен прятать фото опубликованной.
      */
     listByPhoto(url: string): Promise<VacancyRecord[]>;
+    /** Вакансии с этим видео — для раздачи файла по тому же принципу, что и фото. */
+    listByVideo(url: string): Promise<VacancyRecord[]>;
     create(input: NewVacancyInput): Promise<VacancyRecord>;
     update(id: string, patch: VacancyPatch): Promise<VacancyRecord>;
     /** active — видимые студенту, total — все в базе */

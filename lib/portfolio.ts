@@ -37,6 +37,12 @@ export const httpUrlSchema = z
   .url('Похоже, это не ссылка')
   .refine((v) => /^https?:\/\//i.test(v), 'Ссылка должна начинаться с http:// или https://');
 
+/** Видео-визитка, загруженная файлом — по аналогии с COMPANY_FILE_PATTERN. */
+export const STUDENT_VIDEO_FILE_PATTERN = /^\/api\/files\/studentVideo\/[0-9a-f-]{36}\.(mp4|webm)$/i;
+
+/** Ссылка на видео-визитку: внешняя (YouTube и т.п.) или файл, загруженный через форму. */
+export const studentVideoUrlSchema = z.union([httpUrlSchema, z.string().regex(STUDENT_VIDEO_FILE_PATTERN)]);
+
 const optionalText = (max: number) =>
   z.preprocess(emptyToNull, z.string().trim().max(max, `Не длиннее ${max} символов`).nullable());
 
@@ -79,7 +85,7 @@ export const portfolioSchema = z.object({
   activities: z.array(activityItemSchema).max(10, 'Не больше 10 занятий'),
   hobbies: optionalText(400),
   links: z.array(linkItemSchema).max(10, 'Не больше 10 ссылок'),
-  videoUrl: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
+  videoUrl: z.preprocess(emptyToNull, studentVideoUrlSchema.nullable()),
 });
 
 export const EMPTY_PORTFOLIO: StudentPortfolio = {
@@ -119,8 +125,8 @@ export function readPortfolio(row: {
     });
   }
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
-  const url = (value: unknown) =>
-    typeof value === 'string' && httpUrlSchema.safeParse(value).success ? value : null;
+  const video = (value: unknown) =>
+    typeof value === 'string' && studentVideoUrlSchema.safeParse(value).success ? value : null;
   const looking = lookingForSchema.safeParse(row.lookingFor ?? []);
 
   return {
@@ -131,7 +137,7 @@ export function readPortfolio(row: {
     activities: list<ActivityItem>(row.activities, activityItemSchema),
     hobbies: text(row.hobbies),
     links: list<LinkItem>(row.links, linkItemSchema),
-    videoUrl: url(row.videoUrl),
+    videoUrl: video(row.videoUrl),
   };
 }
 

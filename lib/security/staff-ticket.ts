@@ -11,6 +11,7 @@ import { readStaffPermissions, type StaffPermission } from '@/lib/staff-permissi
  */
 
 export interface StaffTicket {
+  kind: 'staff';
   /** Сотрудник в CRM — для журнала */
   sub: string;
   email: string;
@@ -21,8 +22,26 @@ export interface StaffTicket {
   exp: number;
 }
 
+/**
+ * Билет клиента CRM — вход в кабинет компании, привязанной к этому
+ * клиенту (Employer.crmClientId), без пароля на студенческой платформе.
+ */
+export interface ClientTicket {
+  kind: 'client';
+  /** Пользователь клиента в CRM, который вошёл, — для журнала */
+  sub: string;
+  crmClientId: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  jti: string;
+  exp: number;
+}
+
+export type CrmTicket = StaffTicket | ClientTicket;
+
 export type TicketCheck =
-  | { ok: true; ticket: StaffTicket }
+  | { ok: true; ticket: CrmTicket }
   | { ok: false; reason: 'FORMAT' | 'SIGNATURE' | 'EXPIRED' | 'CLAIMS' };
 
 const ISSUER = 'fattakhov-crm';
@@ -75,14 +94,50 @@ export function verifyStaffTicket(
   }
   if (exp <= nowSeconds) return { ok: false, reason: 'EXPIRED' };
 
-  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
-  const permissions = readStaffPermissions(payload.permissions) ?? [];
   if (
     typeof payload.sub !== 'string' ||
     !payload.sub ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     typeof payload.jti !== 'string' ||
-    payload.jti.length < 16 ||
+    payload.jti.length < 16
+  ) {
+    return { ok: false, reason: 'CLAIMS' };
+  }
+
+  if (payload.kind === 'client') {
+    const contactEmail = typeof payload.contactEmail === 'string' ? payload.contactEmail.trim().toLowerCase() : '';
+    if (
+      typeof payload.crmClientId !== 'string' ||
+      !payload.crmClientId ||
+      typeof payload.companyName !== 'string' ||
+      !payload.companyName.trim() ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)
+    ) {
+      return { ok: false, reason: 'CLAIMS' };
+    }
+    const contactName =
+      typeof payload.contactName === 'string' && payload.contactName.trim()
+        ? payload.contactName.trim().slice(0, 120)
+        : 'Представитель компании';
+    return {
+      ok: true,
+      ticket: {
+        kind: 'client',
+        sub: payload.sub,
+        crmClientId: payload.crmClientId,
+        companyName: payload.companyName.trim().slice(0, 200),
+        contactName,
+        contactEmail,
+        jti: payload.jti,
+        exp,
+      },
+    };
+  }
+
+  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+  const permissions = readStaffPermissions(payload.permissions) ?? [];
+  if (
+    payload.kind !== 'staff' ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     permissions.length === 0
   ) {
     return { ok: false, reason: 'CLAIMS' };
@@ -91,5 +146,8 @@ export function verifyStaffTicket(
   const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim().slice(0, 120) : 'Сотрудник агентства';
   const position = typeof payload.position === 'string' && payload.position.trim() ? payload.position.trim().slice(0, 120) : null;
 
-  return { ok: true, ticket: { sub: payload.sub, email, name, position, permissions, jti: payload.jti, exp } };
+  return {
+    ok: true,
+    ticket: { kind: 'staff', sub: payload.sub, email, name, position, permissions, jti: payload.jti, exp },
+  };
 }

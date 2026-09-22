@@ -26,10 +26,12 @@ export async function GET(
   return handle(async () => {
     const session = await getSession();
 
-    // Логотип и фото компании — не персональные данные, их видит и гость
-    // на странице компании. Но только одобренной: страница компании на
-    // модерации не публична, и её картинки тоже.
-    if (params.kind === 'company') return readCompanyFile(session, params.name);
+    // Логотип, фото и видео компании — не персональные данные, их видит и
+    // гость на странице компании. Но только одобренной: страница компании
+    // на модерации не публична, и её медиафайлы тоже.
+    if (params.kind === 'company' || params.kind === 'companyVideo') {
+      return readCompanyFile(session, params.kind, params.name);
+    }
 
     if (!session) return fail(401, 'Требуется вход в систему', 'UNAUTHORIZED');
 
@@ -52,18 +54,21 @@ export async function GET(
   });
 }
 
-async function readCompanyFile(session: SessionUser | null, name: string) {
-  const url = `/api/files/company/${name}`;
+async function readCompanyFile(session: SessionUser | null, kind: 'company' | 'companyVideo', name: string) {
+  const url = `/api/files/${kind}/${name}`;
   const store = await getStore();
   const employers = await store.employers.list();
-  let owner = employers.find((e) => e.logoUrl === url || e.photos.includes(url));
+  let owner =
+    kind === 'company'
+      ? employers.find((e) => e.logoUrl === url || e.photos.includes(url))
+      : employers.find((e) => e.videoUrl === url);
   let isPublic = owner?.moderationStatus === 'APPROVED';
 
   if (!owner) {
-    // Фото вакансии публично ровно тогда, когда видна хотя бы одна вакансия
-    // с ним: черновик и вакансия на проверке своих фото не раскрывают, но и
-    // не прячут фото, которое стоит ещё и в опубликованной
-    const vacancies = await store.vacancies.listByPhoto(url);
+    // Фото или видео вакансии публично ровно тогда, когда видна хотя бы
+    // одна вакансия с ним: черновик и вакансия на проверке своих медиа не
+    // раскрывают, но и не прячут то, что стоит ещё и в опубликованной
+    const vacancies = kind === 'company' ? await store.vacancies.listByPhoto(url) : await store.vacancies.listByVideo(url);
     if (vacancies.length > 0) {
       owner = employers.find((e) => e.id === vacancies[0].employerId);
       isPublic = vacancies.some((v) => isVacancyVisible(v, employers.find((e) => e.id === v.employerId)));
@@ -74,9 +79,9 @@ async function readCompanyFile(session: SessionUser | null, name: string) {
   const isAdmin = session?.role === 'ADMIN';
 
   // Файл, который ни одна компания не использует, гостю не отдаётся:
-  // иначе загрузка превращалась бы в бесплатный публичный хостинг картинок
-  // Только что загруженная картинка ещё ни одной компании не принадлежит:
-  // её сохранят в странице позже. Работодателю она нужна для превью в
+  // иначе загрузка превращалась бы в бесплатный публичный хостинг медиа.
+  // Только что загруженный файл ещё ни одной компании не принадлежит:
+  // его сохранят в странице позже. Работодателю он нужен для превью в
   // форме. Гость такие файлы не видит, а имя файла — случайный UUID.
   const isFreshUpload = !owner && session?.role === 'EMPLOYER';
 
@@ -84,7 +89,7 @@ async function readCompanyFile(session: SessionUser | null, name: string) {
     return fail(404, 'Файл не найден', 'NOT_FOUND');
   }
 
-  const { body, type } = await readStored('company', name);
+  const { body, type } = await readStored(kind, name);
   return new NextResponse(new Uint8Array(body), {
     headers: {
       'Content-Type': type,
@@ -102,7 +107,13 @@ async function canRead(session: SessionUser, url: string): Promise<boolean> {
 
   if (session.role === 'STUDENT') {
     const student = await store.students.findByAccountId(session.accountId);
-    return !!student && (student.photoUrl === url || student.resumeUrl === url || student.studyDocUrl === url);
+    return (
+      !!student &&
+      (student.photoUrl === url ||
+        student.resumeUrl === url ||
+        student.studyDocUrl === url ||
+        student.videoUrl === url)
+    );
   }
 
   if (session.role === 'EMPLOYER') {
@@ -112,7 +123,7 @@ async function canRead(session: SessionUser, url: string): Promise<boolean> {
     const applications = await store.applications.listByVacancyIds(vacancies.map((v) => v.id));
     for (const application of applications) {
       const student = await store.students.findById(application.studentId);
-      if (student && (student.photoUrl === url || student.resumeUrl === url)) return true;
+      if (student && (student.photoUrl === url || student.resumeUrl === url || student.videoUrl === url)) return true;
     }
   }
 

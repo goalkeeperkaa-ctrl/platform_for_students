@@ -13,15 +13,157 @@
  * не видны по отдельности, но без них тёмная тема выглядит плоской.
  */
 
-@layer base {
-  :root {
-    --page-gutter: clamp(1.25rem, 4vw, 3.5rem);
-    --header-h: 4.5rem;
-    --glass-tint: rgba(30, 33, 36, 0.55);
-    --hairline: rgba(248, 248, 248, 0.09);
-    --hairline-strong: rgba(248, 248, 248, 0.16);
-  }
+/*
+ * Переменные ролей: одна и та же роль (полотно, текст, ступени
+ * поверхности) в обеих темах, значение — своё. :root — светлая тема
+ * (значение по умолчанию, пока JS не решил иначе), .dark — тёмная,
+ * ровно то, что было единственной темой раньше: ни один пиксель
+ * тёмного режима не должен был измениться при этом переходе.
+ *
+ * Тройки чисел без rgb(...) — так их читает withOpacity() в
+ * tailwind.config.ts (rgb(var(--x) / <alpha>)), это и даёт классам вроде
+ * bg-graphite-900/50 работающий модификатор прозрачности в обеих темах.
+ *
+ * Ступени graphite и accent получены из тёмных не побитовой инверсией
+ * (она посадила бы голубой оттенок бренда в жёлтый), а инверсией
+ * светлоты в HSL с тем же тоном и насыщенностью: холодный акцент
+ * остаётся холодным на белом фоне так же, как был на чёрном.
+ */
+:root {
+  /* Полотно светлой темы — тёплый светло-серый, а не чистый белый: так
+     карточки (surface/glass-card ниже, они ближе к белому) заметно
+     «всплывают» над страницей, как в тёмной теме тёмная карточка
+     всплывает над чистым чёрным. Образец — присланный владельцем макет. */
+  --color-ink: 238 237 234;
+  --color-ink-raise: 243 242 239;
+  --color-ink-deep: 233 232 229;
+  --color-paper: 7 7 7;
+  --color-paper-dim: rgba(7, 7, 7, 0.62);
+  --color-paper-faint: rgba(7, 7, 7, 0.38);
 
+  --color-graphite-950: 242 243 244;
+  --color-graphite-900: 234 235 237;
+  --color-graphite-850: 227 229 231;
+  --color-graphite-800: 219 222 225;
+  --color-graphite-750: 210 214 217;
+  --color-graphite-700: 200 204 208;
+  --color-graphite-600: 184 189 194;
+  --color-graphite-500: 164 171 178;
+  --color-graphite-400: 132 142 151;
+  --color-graphite-300: 99 108 116;
+  --color-graphite-200: 64 70 75;
+  --color-graphite-100: 32 35 37;
+
+  --color-accent-950: 222 229 236;
+  --color-accent-900: 208 218 227;
+  --color-accent-800: 191 205 218;
+  --color-accent-700: 169 186 204;
+  --color-accent-600: 143 166 189;
+  --color-accent-500: 117 145 174;
+  --color-accent-400: 88 119 150;
+  --color-accent-300: 68 92 116;
+  --color-accent-200: 47 63 79;
+  --color-accent-100: 26 35 44;
+
+  --page-gutter: clamp(1.25rem, 4vw, 3.5rem);
+  --header-h: 4.5rem;
+  /* Атмосфера (components/layout/Aurora.tsx): на чёрном полотне цветное
+     свечение задаёт источник света, на светлом оно того же смысла не
+     несёт — там достаточно чуть заметной виньетки по краям, как на
+     макете. Второй (тёплый) слой в светлой теме не нужен вовсе — 0. */
+  --aurora-top: rgba(84, 110, 136, 0.16), rgba(84, 110, 136, 0.05) 55%, transparent 78%;
+  --aurora-bottom-opacity: 0;
+  --aurora-vignette: transparent 55%, rgba(20, 22, 24, 0.05) 100%;
+  --glass-tint: rgba(255, 255, 255, 0.65);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --hairline: rgba(7, 7, 7, 0.08);
+  --hairline-strong: rgba(7, 7, 7, 0.14);
+  --surface-glass-card: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(244, 244, 244, 0.985));
+  --surface-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 246, 246, 0.92));
+  --surface-glass-soft: rgba(255, 255, 255, 0.55);
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.8) inset, 0 2px 6px -1px rgba(20, 22, 24, 0.1), 0 28px 64px -24px rgba(20, 22, 24, 0.18);
+  --shadow-lift: 0 1px 0 0 rgba(255, 255, 255, 0.9) inset, 0 4px 12px -2px rgba(20, 22, 24, 0.12), 0 44px 96px -32px rgba(20, 22, 24, 0.22);
+  --shadow-surface: inset 0 1px 0 0 rgba(255, 255, 255, 0.7), 0 2px 6px -1px rgba(20, 22, 24, 0.08), 0 24px 56px -28px rgba(20, 22, 24, 0.16);
+  --shadow-inset: inset 0 1px 2px 0 rgba(20, 22, 24, 0.12);
+  --hairline-x-tint: rgba(7, 7, 7, 0.1);
+  --text-gradient-from: #070707;
+  --text-gradient-to: rgba(7, 7, 7, 0.62);
+  --shimmer-tint: rgba(7, 7, 7, 0.06);
+  --focus-ring-bg: #ffffff;
+  --scrollbar-thumb: rgba(7, 7, 7, 0.16);
+  --scrollbar-thumb-hover: rgba(7, 7, 7, 0.26);
+  --placeholder-color: rgba(7, 7, 7, 0.32);
+  --selection-fg: #070707;
+  --autofill-bg: #edeeef;
+  /* Тень главной кнопки (components/ui/Button.tsx, primary): в тёмной
+     теме — светлое свечение под белой кнопкой, в светлой — обычная тень
+     под тёмной, а не тот же светлый цвет (иначе на светлом фоне свечения
+     попросту не видно). */
+  --shadow-button-primary: rgba(7, 7, 7, 0.22);
+}
+
+.dark {
+  --color-ink: 0 0 0;
+  --color-ink-raise: 8 9 10;
+  --color-ink-deep: 5 5 6;
+  --color-paper: 248 248 248;
+  --color-paper-dim: rgba(248, 248, 248, 0.62);
+  --color-paper-faint: rgba(248, 248, 248, 0.38);
+
+  --color-graphite-950: 11 12 13;
+  --color-graphite-900: 18 20 21;
+  --color-graphite-850: 24 26 28;
+  --color-graphite-800: 30 33 36;
+  --color-graphite-750: 38 41 45;
+  --color-graphite-700: 47 51 55;
+  --color-graphite-600: 61 66 71;
+  --color-graphite-500: 78 84 90;
+  --color-graphite-400: 107 114 120;
+  --color-graphite-300: 141 148 154;
+  --color-graphite-200: 180 186 191;
+  --color-graphite-100: 217 221 224;
+
+  --color-accent-950: 18 26 34;
+  --color-accent-900: 27 37 48;
+  --color-accent-800: 38 51 63;
+  --color-accent-700: 51 69 86;
+  --color-accent-600: 67 89 111;
+  --color-accent-500: 84 110 136;
+  --color-accent-400: 110 136 162;
+  --color-accent-300: 141 163 185;
+  --color-accent-200: 176 192 208;
+  --color-accent-100: 211 220 229;
+
+  --page-gutter: clamp(1.25rem, 4vw, 3.5rem);
+  --header-h: 4.5rem;
+  --aurora-top: rgba(84, 110, 136, 0.42), rgba(84, 110, 136, 0.12) 55%, transparent 78%;
+  --aurora-bottom-opacity: 0.4;
+  --aurora-vignette: transparent 40%, rgba(0, 0, 0, 0.55) 100%;
+  --glass-tint: rgba(30, 33, 36, 0.55);
+  --glass-highlight: rgba(248, 248, 248, 0.07);
+  --hairline: rgba(248, 248, 248, 0.09);
+  --hairline-strong: rgba(248, 248, 248, 0.16);
+  --surface-glass-card: linear-gradient(180deg, rgba(24, 27, 30, 0.97), rgba(11, 12, 13, 0.985));
+  --surface-surface: linear-gradient(180deg, rgba(26, 29, 32, 0.92), rgba(17, 19, 21, 0.92));
+  --surface-glass-soft: rgba(24, 26, 28, 0.5);
+  --shadow-card: inset 0 1px 0 0 rgba(248, 248, 248, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.7), 0 28px 64px -24px rgba(0, 0, 0, 0.95);
+  --shadow-lift: inset 0 1px 0 0 rgba(248, 248, 248, 0.09), 0 4px 12px -2px rgba(0, 0, 0, 0.8), 0 44px 96px -32px rgba(0, 0, 0, 1);
+  --shadow-surface: inset 0 1px 0 0 rgba(248, 248, 248, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.6), 0 24px 56px -28px rgba(0, 0, 0, 0.9);
+  --shadow-inset: inset 0 1px 2px 0 rgba(0, 0, 0, 0.6);
+  --hairline-x-tint: rgba(248, 248, 248, 0.12);
+  --text-gradient-from: #f8f8f8;
+  --text-gradient-to: rgba(248, 248, 248, 0.62);
+  --shimmer-tint: rgba(248, 248, 248, 0.08);
+  --focus-ring-bg: #000000;
+  --scrollbar-thumb: rgba(248, 248, 248, 0.14);
+  --scrollbar-thumb-hover: rgba(248, 248, 248, 0.24);
+  --placeholder-color: rgba(248, 248, 248, 0.3);
+  --selection-fg: #f8f8f8;
+  --autofill-bg: #1e2124;
+  --shadow-button-primary: rgba(248, 248, 248, 0.35);
+}
+
+@layer base {
   * {
     border-color: var(--hairline);
   }
@@ -41,24 +183,24 @@
 
   ::selection {
     background: rgba(84, 110, 136, 0.4);
-    color: #f8f8f8;
+    color: var(--selection-fg);
   }
 
   /* Тонкий скроллбар в тон полотну — дефолтный светлый рвёт тёмную тему */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(248, 248, 248, 0.14) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   *::-webkit-scrollbar-thumb {
-    background: rgba(248, 248, 248, 0.14);
+    background: var(--scrollbar-thumb);
     border-radius: 999px;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: rgba(248, 248, 248, 0.24);
+    background: var(--scrollbar-thumb-hover);
   }
   *::-webkit-scrollbar-track {
     background: transparent;
@@ -67,7 +209,7 @@
   :focus-visible {
     outline: none;
     box-shadow:
-      0 0 0 2px #000,
+      0 0 0 2px var(--focus-ring-bg),
       0 0 0 4px rgba(110, 136, 162, 0.75);
     border-radius: inherit;
   }
@@ -80,15 +222,15 @@
 
   input::placeholder,
   textarea::placeholder {
-    color: rgba(248, 248, 248, 0.3);
+    color: var(--placeholder-color);
   }
 
-  /* Автозаполнение Chrome заливает поле белым — возвращаем стекло */
+  /* Автозаполнение Chrome заливает поле сплошным цветом — возвращаем стекло */
   input:-webkit-autofill,
   input:-webkit-autofill:focus {
-    -webkit-text-fill-color: #f8f8f8;
-    -webkit-box-shadow: 0 0 0 1000px #1e2124 inset;
-    caret-color: #f8f8f8;
+    -webkit-text-fill-color: rgb(var(--color-paper));
+    -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg) inset;
+    caret-color: rgb(var(--color-paper));
   }
 }
 
@@ -100,42 +242,33 @@
     backdrop-filter: blur(24px) saturate(140%);
     -webkit-backdrop-filter: blur(24px) saturate(140%);
     border: 1px solid var(--hairline);
-    box-shadow:
-      inset 0 1px 0 0 rgba(248, 248, 248, 0.07),
-      0 2px 6px -1px rgba(0, 0, 0, 0.7),
-      0 28px 64px -24px rgba(0, 0, 0, 0.95);
+    box-shadow: var(--shadow-card);
   }
 
   /* Карточка в стопке. Плотнее обычного стекла намеренно: сквозь 55%
      прозрачности видно следующую карточку, и заголовки накладываются
      друг на друга. Размытие фона остаётся — стекло, но матовое. */
   .glass-card {
-    background: linear-gradient(180deg, rgba(24, 27, 30, 0.97), rgba(11, 12, 13, 0.985));
+    background: var(--surface-glass-card);
     backdrop-filter: blur(24px) saturate(140%);
     -webkit-backdrop-filter: blur(24px) saturate(140%);
     border: 1px solid var(--hairline);
-    box-shadow:
-      inset 0 1px 0 0 rgba(248, 248, 248, 0.07),
-      0 2px 6px -1px rgba(0, 0, 0, 0.7),
-      0 28px 64px -24px rgba(0, 0, 0, 0.95);
+    box-shadow: var(--shadow-card);
   }
 
   /* Матовая поверхность для списков.
      Выглядит как стекло, но без backdrop-filter: под строкой списка всё
-     равно ровный чёрный фон, размывать там нечего — а полсотни слоёв с
+     равно ровный фон полотна, размывать там нечего — а полсотни слоёв с
      размытием подложки роняют прокрутку. Настоящее стекло остаётся там,
      где сквозь него что-то видно: шапка, шторка, карточка свайпа. */
   .surface {
-    background: linear-gradient(180deg, rgba(26, 29, 32, 0.92), rgba(17, 19, 21, 0.92));
+    background: var(--surface-surface);
     border: 1px solid var(--hairline);
-    box-shadow:
-      inset 0 1px 0 0 rgba(248, 248, 248, 0.06),
-      0 2px 6px -1px rgba(0, 0, 0, 0.6),
-      0 24px 56px -28px rgba(0, 0, 0, 0.9);
+    box-shadow: var(--shadow-surface);
   }
 
   .glass-soft {
-    background: rgba(24, 26, 28, 0.5);
+    background: var(--surface-glass-soft);
     backdrop-filter: blur(18px) saturate(130%);
     -webkit-backdrop-filter: blur(18px) saturate(130%);
     border: 1px solid var(--hairline);
@@ -148,14 +281,14 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(248, 248, 248, 0.12) 15%,
-      rgba(248, 248, 248, 0.12) 85%,
+      var(--hairline-x-tint) 15%,
+      var(--hairline-x-tint) 85%,
       transparent
     );
   }
 
   .text-gradient {
-    background: linear-gradient(180deg, #f8f8f8 0%, rgba(248, 248, 248, 0.62) 100%);
+    background: linear-gradient(180deg, var(--text-gradient-from) 0%, var(--text-gradient-to) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -173,9 +306,9 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(248, 248, 248, 0.08) 45%,
-      rgba(248, 248, 248, 0.13) 50%,
-      rgba(248, 248, 248, 0.08) 55%,
+      var(--shimmer-tint) 45%,
+      var(--hairline-strong) 50%,
+      var(--shimmer-tint) 55%,
       transparent
     );
     animation: shimmer 1.8s infinite;

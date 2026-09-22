@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { TextAreaField, TextField } from '@/components/ui/Field';
 import { useToast } from '@/components/ui/Toast';
 import { PhotoUpload } from '@/components/forms/PhotoUpload';
+import { VideoUpload } from '@/components/forms/VideoUpload';
 import { companyProfileSchema } from '@/lib/company';
 import { normalizeInn } from '@/lib/inn';
 import { durations, easeOutExpo } from '@/lib/motion';
@@ -304,15 +305,20 @@ export function CompanyEditor({
               Добавить соцсеть
             </Button>
 
-            <TextField
-              label="Видео о компании"
-              type="url"
-              inputMode="url"
-              value={form.videoUrl}
-              error={errors.videoUrl}
-              hint="Необязательно. Ссылка на VK Видео, YouTube, Яндекс Диск."
-              onChange={(e) => patch({ videoUrl: e.target.value })}
-            />
+            <div className="space-y-3">
+              {!form.videoUrl.startsWith('/api/files/companyVideo/') && (
+                <TextField
+                  label="Видео о компании"
+                  type="url"
+                  inputMode="url"
+                  value={form.videoUrl}
+                  error={errors.videoUrl}
+                  hint="Необязательно. Ссылка на VK Видео, YouTube, Яндекс Диск — или загрузите файл ниже."
+                  onChange={(e) => patch({ videoUrl: e.target.value })}
+                />
+              )}
+              <VideoUpload kind="companyVideo" value={form.videoUrl} onChange={(url) => patch({ videoUrl: url })} />
+            </div>
           </div>
         </Section>
 
