@@ -199,6 +199,13 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
   }
 
   function goBack() {
+    // На первом шаге отступать в мастере некуда — раньше кнопка тут
+    // просто гасла, и это читалось как «не работает». Логичнее увести
+    // туда, откуда и пришли на регистрацию.
+    if (step === 0) {
+      navigate('/');
+      return;
+    }
     setDirection(-1);
     setErrors({});
     setStep((s) => Math.max(0, s - 1));
@@ -308,7 +315,7 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
               variant="ghost"
               size="lg"
               onClick={goBack}
-              disabled={step === 0 || submitting}
+              disabled={submitting}
               icon={<ArrowLeft />}
             >
               Назад

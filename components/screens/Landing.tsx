@@ -108,13 +108,29 @@ export function Landing({
             transition={{ duration: durations.slow, ease: easeOutExpo, delay: 0.68 }}
             className="mt-9 flex flex-wrap items-center gap-3"
           >
+            {/* Раньше тут была одна кнопка «Создать профиль» — работодатель
+                на витрине попадал только в подвал и на закрытый /employer.
+                Два равных входа сразу под заголовком снимают вопрос «а где
+                тут для компании», не заставляя искать его внизу страницы. */}
             <Button size="lg" onClick={() => navigate('/register')} iconRight={<ArrowRight />}>
-              Создать профиль
+              Я студент
             </Button>
-            <Link href="/login">
-              <Button variant="outline" size="lg">
-                У меня уже есть аккаунт
-              </Button>
+            <Button size="lg" variant="outline" onClick={() => navigate('/register/company')}>
+              Я работодатель
+            </Button>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: durations.slow, ease: easeOutExpo, delay: 0.78 }}
+            className="mt-4"
+          >
+            <Link
+              href="/login"
+              className="text-[13.5px] text-paper-faint underline-offset-4 transition-colors hover:text-paper hover:underline"
+            >
+              Уже есть аккаунт? Войти
             </Link>
           </motion.div>
 
@@ -226,7 +242,7 @@ export function Landing({
             <Button size="lg" onClick={() => navigate('/register')} iconRight={<ArrowRight />}>
               Создать профиль
             </Button>
-            <Link href="/employer">
+            <Link href="/register/company">
               <Button variant="ghost" size="lg">
                 Я работодатель
               </Button>
