@@ -16,6 +16,25 @@ export const PENDING_APPLICATION_DAYS = 14;
 
 const DAY = 86_400_000;
 
+/**
+ * Вуз/специальность/курс убраны из регистрации — их дозаполняют в профиле.
+ * Колонки в базе обязательные (NOT NULL), поэтому до дозаполнения туда
+ * пишется плейсхолдер, а не NULL. Настоящее значение вуза и специальности
+ * проходит `min(2)` при вводе, а курс лежит в 1–6 — плейсхолдеры лежат вне
+ * этих диапазонов и поэтому не спутать с реальными данными.
+ */
+export const EDUCATION_PLACEHOLDER = '';
+export const EDUCATION_PLACEHOLDER_YEAR = 0;
+
+/** Дозаполнены ли вуз, специальность и курс — или там ещё плейсхолдер. */
+export function hasEducation(student: { university: string; speciality: string; studyYear: number }): boolean {
+  return (
+    student.university.trim().length > 0 &&
+    student.speciality.trim().length > 0 &&
+    student.studyYear > 0
+  );
+}
+
 /** Файл справки — только загруженный через платформу, вида `study`. */
 export const STUDY_FILE_PATTERN = /^\/api\/files\/study\/[0-9a-f-]{36}\.(pdf|jpg|png|webp)$/i;
 
@@ -82,12 +101,15 @@ export function daysUntil(date: Date, now: Date = new Date()): number {
 }
 
 /**
- * Отклики уходят работодателю, только когда подтверждены и учёба, и почта.
- * До тех пор свайп вправо сохраняется и ждёт (releasePendingApplications).
+ * Отклики уходят работодателю, только когда подтверждены и учёба, и почта,
+ * и дозаполнены вуз/специальность/курс (после упрощённой регистрации их
+ * могло не быть). До тех пор свайп вправо сохраняется и ждёт
+ * (releasePendingApplications) — без автоудаления по этой причине, только
+ * пока не истёк общий двухнедельный срок ожидания.
  */
 export function applicationsOpen(
-  student: { studyVerified: boolean },
+  student: { studyVerified: boolean; university: string; speciality: string; studyYear: number },
   account: { emailVerifiedAt: Date | null } | null,
 ): boolean {
-  return student.studyVerified && Boolean(account?.emailVerifiedAt);
+  return student.studyVerified && Boolean(account?.emailVerifiedAt) && hasEducation(student);
 }

@@ -9,6 +9,7 @@ import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
 import { HOME_BY_ROLE, SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/security/session';
+import { EDUCATION_PLACEHOLDER, EDUCATION_PLACEHOLDER_YEAR } from '@/lib/study';
 import { emailCodeSchema } from '@/lib/validation';
 import type { SessionUser } from '@/lib/types';
 
@@ -55,10 +56,14 @@ export async function POST(request: Request) {
         photoUrl: input.photoUrl,
         resumeUrl: input.resumeUrl,
         resumeName: input.resumeName,
-        university: input.university,
+        // Вуз/специальность/курс теперь заполняются в профиле после
+        // регистрации — если ещё не заполнены, пишем плейсхолдер вместо
+        // NULL (колонки в базе обязательные) и отмечаем это отдельным
+        // флагом, чтобы отклики не открывались с неполным профилем
+        university: input.university ?? EDUCATION_PLACEHOLDER,
         institutionId: input.institutionId ?? null,
-        speciality: input.speciality,
-        studyYear: input.studyYear,
+        speciality: input.speciality ?? EDUCATION_PLACEHOLDER,
+        studyYear: input.studyYear ?? EDUCATION_PLACEHOLDER_YEAR,
         city: input.city,
         workDays: input.workDays,
         hoursPerWeek: input.hoursPerWeek,

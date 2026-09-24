@@ -77,17 +77,21 @@ export function SwipeDeck({ initial }: { initial: VacancyDTO[] }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vacancyId: card.id, direction }),
         });
-        const data = (await response.json().catch(() => ({}))) as { error?: string; pending?: boolean; reason?: 'EMAIL' | 'STUDY' };
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          pending?: boolean;
+          reason?: 'EMAIL' | 'STUDY' | 'PROFILE';
+        };
         if (!response.ok) throw new Error(data.error);
 
         if (direction === 'RIGHT') {
           if (data.pending) {
-            toast.success(
-              'Отклик сохранён',
-              data.reason === 'EMAIL'
-                ? 'Уйдёт работодателю, когда вы подтвердите почту — код в письме'
-                : 'Уйдёт работодателю, как только HR-менеджер подтвердит учёбу',
-            );
+            const messages: Record<'EMAIL' | 'STUDY' | 'PROFILE', string> = {
+              EMAIL: 'Уйдёт работодателю, когда вы подтвердите почту — код в письме',
+              STUDY: 'Уйдёт работодателю, как только HR-менеджер подтвердит учёбу',
+              PROFILE: 'Уйдёт работодателю, как только вы укажете вуз и специальность в профиле',
+            };
+            toast.success('Отклик сохранён', messages[data.reason ?? 'STUDY']);
           } else {
             toast.success('Отклик отправлен', `${card.title} · ${card.company}`);
           }

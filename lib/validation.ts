@@ -21,6 +21,9 @@ import {
  * которые он молча отвергает без объяснений.
  */
 
+/** Пустая строка из поля формы — это «не заполнено», а не значение. */
+const emptyToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
+
 export const emailSchema = z
   .string()
   .trim()
@@ -126,12 +129,24 @@ export const registrationSteps = {
     photoUrl: z.string().max(500).nullable(),
   }),
   education: z.object({
-    university: z.string().trim().min(2, 'Укажите вуз').max(160),
+    // Пусто — не заполнили ещё: шаг убрали из регистрации, чтобы не
+    // задерживать её, и вуз/специальность/курс заполняются в профиле
+    // после. Раз заполнили — по-прежнему не короче двух символов.
+    university: z.preprocess(
+      (v) => (v === undefined ? null : emptyToNull(v)),
+      z.string().trim().min(2, 'Укажите вуз').max(160).nullable(),
+    ),
     // Вуз из справочника. null — вписан вручную; undefined — клиент о
     // справочнике не знает, и сервер решает сам (см. /api/students/me)
     institutionId: z.string().trim().min(1).max(64).nullable().optional(),
-    speciality: z.string().trim().min(2, 'Укажите специальность').max(160),
-    studyYear: z.number().int().min(1, 'От 1 курса').max(6, 'До 6 курса'),
+    speciality: z.preprocess(
+      (v) => (v === undefined ? null : emptyToNull(v)),
+      z.string().trim().min(2, 'Укажите специальность').max(160).nullable(),
+    ),
+    studyYear: z.preprocess(
+      (v) => (v === '' || v === undefined ? null : v),
+      z.number().int().min(1, 'От 1 курса').max(6, 'До 6 курса').nullable(),
+    ),
     city: z.string().trim().max(80).nullable(),
   }),
   schedule: scheduleObject.superRefine(scheduleRule),

@@ -12,18 +12,13 @@ import { useToast } from '@/components/ui/Toast';
 import { ConfirmCodeStep } from '@/components/forms/ConfirmCodeStep';
 import { ConsentChecks } from '@/components/legal/ConsentChecks';
 import { companyRegistrationSchema } from '@/lib/company';
-import { normalizeInn } from '@/lib/inn';
 import { durations, easeOutExpo } from '@/lib/motion';
 import { PILOT_CITY } from '@/lib/pilot';
 
 interface FormState {
-  companyName: string;
-  inn: string;
-  contactName: string;
   phone: string;
   email: string;
   password: string;
-  industry: string;
   city: string;
   consent: boolean;
   terms: boolean;
@@ -31,13 +26,9 @@ interface FormState {
 }
 
 const INITIAL: FormState = {
-  companyName: '',
-  inn: '',
-  contactName: '',
   phone: '',
   email: '',
   password: '',
-  industry: '',
   city: PILOT_CITY,
   consent: false,
   terms: false,
@@ -47,14 +38,13 @@ const INITIAL: FormState = {
 /**
  * Регистрация компании.
  *
- * Одна короткая форма, а не мастер: у компании на входе нужно ровно то,
- * без чего нельзя завести кабинет и проверить компанию. Страницу компании —
- * описание, фото, культуру — заполняют уже внутри, спокойно, а не на пороге.
+ * Ровно то, без чего нельзя завести кабинет: телефон, почта и пароль.
+ * Название, ИНН и контактное лицо — не здесь, а в разделе «Компания» в
+ * кабинете, перед тем как отправлять вакансию на проверку: именно тогда
+ * они нужны HR-менеджеру, а на пороге только удлиняют форму.
  *
- * ИНН и телефон — для проверки: HR-менеджер сверяет ИНН с госреестром и,
- * если в открытых источниках о компании ничего нет, звонит. Сразу говорим
- * про модерацию: компания, которая узнаёт о проверке только после того, как
- * оформила вакансию, чувствует себя обманутой.
+ * Телефон остаётся обязательным и здесь — по нему агентство свяжется,
+ * если писем на почту не хватит для проверки компании.
  */
 export function CompanyRegistrationForm() {
   const router = useRouter();
@@ -76,7 +66,7 @@ export function CompanyRegistrationForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const payload = { ...form, industry: form.industry || null, city: form.city || null };
+    const payload = { ...form, city: form.city || null, industry: null };
 
     const parsed = companyRegistrationSchema.safeParse(payload);
     if (!parsed.success) {
@@ -145,37 +135,12 @@ export function CompanyRegistrationForm() {
             <>
           <h1 className="text-display-sm text-paper">Регистрация компании</h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-paper-dim">
-            Кабинет откроется после подтверждения почты кодом. Студенты увидят компанию и вакансии
-            после проверки агентством: HR-менеджер сверит ИНН с госреестром и при необходимости
-            позвонит. Это защищает студентов от фейковых работодателей.
+            Кабинет откроется после подтверждения почты кодом. Название компании, ИНН и контакт
+            попросим следом, в разделе «Компания», — по ним HR-менеджер сверит компанию с
+            госреестром перед тем, как вакансии увидят студенты.
           </p>
 
           <form onSubmit={submit} className="mt-6 space-y-3" noValidate>
-            <TextField
-              label="Название компании"
-              autoComplete="organization"
-              value={form.companyName}
-              error={errors.companyName}
-              onChange={(e) => patch({ companyName: e.target.value })}
-            />
-            <TextField
-              label="ИНН"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={12}
-              value={form.inn}
-              error={errors.inn}
-              hint="10 цифр у организации, 12 у ИП. По нему агентство проверит компанию в госреестре."
-              onChange={(e) => patch({ inn: normalizeInn(e.target.value).slice(0, 12) })}
-            />
-            <TextField
-              label="Кто будет вести кабинет"
-              autoComplete="name"
-              value={form.contactName}
-              error={errors.contactName}
-              hint="Имя и фамилия. Студентам не показывается."
-              onChange={(e) => patch({ contactName: e.target.value })}
-            />
             <TextField
               label="Телефон для связи"
               type="tel"
@@ -202,23 +167,6 @@ export function CompanyRegistrationForm() {
               hint="Минимум 8 символов, буквы и цифры"
               onChange={(e) => patch({ password: e.target.value })}
             />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextField
-                label="Отрасль"
-                value={form.industry}
-                error={errors.industry}
-                hint="Необязательно"
-                onChange={(e) => patch({ industry: e.target.value })}
-              />
-              <TextField
-                label="Город"
-                autoComplete="address-level2"
-                value={form.city}
-                error={errors.city}
-                hint="Пилот — в Казани"
-                onChange={(e) => patch({ city: e.target.value })}
-              />
-            </div>
 
             <div className="pt-2">
               <ConsentChecks

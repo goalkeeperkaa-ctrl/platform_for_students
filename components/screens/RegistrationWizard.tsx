@@ -16,7 +16,6 @@ import { PhotoUpload } from '@/components/forms/PhotoUpload';
 import { ResumeUpload } from '@/components/forms/ResumeUpload';
 import { ScheduleFields } from '@/components/forms/ScheduleFields';
 import { SkillsInput } from '@/components/forms/SkillsInput';
-import { UniversityInput } from '@/components/forms/UniversityInput';
 import { ConsentChecks } from '@/components/legal/ConsentChecks';
 import { useCurtainNav } from '@/components/motion/RouteCurtain';
 import { durations, easeOutExpo, springSoft, stepVariants } from '@/lib/motion';
@@ -27,7 +26,6 @@ import {
   LOOKING_FOR,
   LOOKING_FOR_LABEL,
   type Gender,
-  type InstitutionOption,
   type LookingFor,
   type Weekday,
 } from '@/lib/types';
@@ -35,7 +33,6 @@ import {
 const STEP_META = [
   { key: 'identity', title: 'Как вас зовут', hint: 'Так вас увидит работодатель' },
   { key: 'photo', title: 'Добавьте фото', hint: 'Профили с фото открывают в три раза чаще' },
-  { key: 'education', title: 'Где вы учитесь', hint: 'Подбираем вакансии рядом с вузом' },
   { key: 'schedule', title: 'Когда можете работать', hint: 'Главный фильтр подбора' },
   { key: 'skills', title: 'Что вы умеете', hint: 'Навыки поднимают вакансии в ленте' },
   { key: 'account', title: 'Вход и согласие', hint: 'Последний шаг' },
@@ -52,10 +49,6 @@ interface FormState {
   gender: Gender;
   birthDate: string;
   photoUrl: string | null;
-  university: string;
-  institutionId: string | null;
-  speciality: string;
-  studyYear: number;
   city: string;
   workDays: Weekday[];
   hoursPerWeek: number | null;
@@ -77,10 +70,6 @@ const INITIAL: FormState = {
   gender: 'UNSPECIFIED',
   birthDate: '',
   photoUrl: null,
-  university: '',
-  institutionId: null,
-  speciality: '',
-  studyYear: 1,
   city: PILOT_CITY,
   workDays: [],
   hoursPerWeek: 20,
@@ -100,16 +89,18 @@ const INITIAL: FormState = {
 /**
  * Мастер регистрации.
  *
- * Шесть коротких шагов вместо одной длинной формы: студент заполняет её
- * с телефона между парами, и полотно из четырнадцати полей закрывают, не
- * начав. Каждый шаг проверяется своей схемой — той же, что и на сервере,
- * поэтому «прошло на клиенте, отвергнуто сервером» здесь невозможно.
+ * Пять коротких шагов вместо одной длинной формы: студент заполняет её
+ * с телефона между парами. Вуз, специальность и курс сюда не входят —
+ * это не влияет на подбор вакансий, поэтому их можно дозаполнить в
+ * профиле уже после регистрации, не задерживая её. Каждый шаг
+ * проверяется своей схемой — той же, что и на сервере, поэтому
+ * «прошло на клиенте, отвергнуто сервером» здесь невозможно.
  *
  * Направление анимации зависит от того, куда идём: вперёд контент
  * приезжает справа, назад — слева. Это единственное, что подсказывает,
  * что шаги лежат на одной оси, а не подменяют друг друга.
  */
-export function RegistrationWizard({ institutions }: { institutions: InstitutionOption[] }) {
+export function RegistrationWizard() {
   const toast = useToast();
   const navigate = useCurtainNav();
 
@@ -142,14 +133,6 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
         return { fullName: form.fullName, gender: form.gender, birthDate: form.birthDate };
       case 'photo':
         return { photoUrl: form.photoUrl };
-      case 'education':
-        return {
-          university: form.university,
-          institutionId: form.institutionId,
-          speciality: form.speciality,
-          studyYear: form.studyYear,
-          city: form.city || null,
-        };
       case 'schedule':
         return { workDays: form.workDays, hoursPerWeek: form.hoursPerWeek };
       case 'skills':
@@ -387,52 +370,6 @@ export function RegistrationWizard({ institutions }: { institutions: Institution
             <p className="text-center text-[13px] text-paper-faint">
               Шаг можно пропустить — фото добавляется и позже.
             </p>
-          </div>
-        );
-
-      case 'education':
-        return (
-          <div className="space-y-5">
-            <UniversityInput
-              autoFocus
-              value={form.university}
-              institutionId={form.institutionId}
-              institutions={institutions}
-              error={errors.university ?? errors.institutionId}
-              onChange={(next) => patch(next)}
-            />
-            <TextField
-              label="Специальность"
-              value={form.speciality}
-              error={errors.speciality}
-              onChange={(e) => patch({ speciality: e.target.value })}
-            />
-            <fieldset>
-              <legend className="mb-3 text-[12.5px] uppercase tracking-[0.12em] text-paper-faint">
-                Курс
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4, 5, 6].map((year) => (
-                  <Chip
-                    key={year}
-                    selected={form.studyYear === year}
-                    onToggle={() => patch({ studyYear: year })}
-                  >
-                    {year}
-                  </Chip>
-                ))}
-              </div>
-              {errors.studyYear && (
-                <p className="pt-2 text-[12.5px] text-danger">{errors.studyYear}</p>
-              )}
-            </fieldset>
-            <TextField
-              label="Город"
-              value={form.city}
-              error={errors.city}
-              hint="Пилот платформы проходит в Казани — вакансии пока только здесь."
-              onChange={(e) => patch({ city: e.target.value })}
-            />
           </div>
         );
 

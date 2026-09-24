@@ -77,8 +77,10 @@ export async function PATCH(request: Request) {
 
     // Название компании — в сессионном токене, шапка берёт его оттуда.
     // Без переподписи новое название появилось бы только после перевхода.
-    if (updated.companyName !== session.name) {
-      const next: SessionUser = { ...session, name: updated.companyName };
+    // Пока название не дозаполнено, в шапке — заглушка, а не пустая строка.
+    const displayName = updated.companyName || 'Новая компания';
+    if (displayName !== session.name) {
+      const next: SessionUser = { ...session, name: displayName };
       cookies().set(SESSION_COOKIE, await signSession(next), sessionCookieOptions);
     }
 

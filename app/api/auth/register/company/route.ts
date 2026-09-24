@@ -29,15 +29,17 @@ export async function POST(request: Request) {
     const input = companyRegistrationSchema.parse(await request.json());
     const store = await getStore();
 
-    // Почта и ИНН проверяются до отправки кода: иначе письмо ушло бы на
-    // регистрацию, которая при подтверждении всё равно будет отвергнута
+    // Почта и ИНН (если его уже прислали) проверяются до отправки кода:
+    // иначе письмо ушло бы на регистрацию, которая при подтверждении
+    // всё равно будет отвергнута
     const existingEmail = await store.accounts.findByEmailHash(blindIndex(input.email));
     if (existingEmail) {
       return fail(409, 'Аккаунт с такой почтой уже зарегистрирован', 'EMAIL_TAKEN', {
         email: 'Эта почта уже занята',
       });
     }
-    const existingInn = await store.employers.findByInn(input.inn);
+    // ИНН теперь необязателен на этом шаге — его чаще всего ещё нет
+    const existingInn = input.inn ? await store.employers.findByInn(input.inn) : null;
     if (existingInn) {
       return fail(409, 'Компания с таким ИНН уже зарегистрирована — если это ваша компания, напишите в агентство', 'INN_TAKEN', {
         inn: 'Компания с таким ИНН уже есть на платформе',

@@ -81,7 +81,7 @@ test('ИНН из формы очищается от пробелов и про�
   assert.equal(innSchema.safeParse('1234567890').success, false);
   assert.equal(innSchema.safeParse('12345').success, false);
 });
-test('регистрация компании требует ИНН, телефон и оба согласия', () => {
+test('регистрация компании требует телефон и оба согласия — название, ИНН и контакт дозаполняются потом', () => {
   const company = {
     companyName: 'Компания',
     contactName: 'Иван Иванов',
@@ -98,6 +98,17 @@ test('регистрация компании требует ИНН, телеф�
   assert.equal(companyRegistrationSchema.safeParse({ ...company, phone: '' }).success, false);
   assert.equal(companyRegistrationSchema.safeParse({ ...company, terms: false }).success, false);
   assert.equal(companyRegistrationSchema.safeParse({ ...company, inn: '7707083894' }).success, false);
+  // Упрощённая регистрация: название, контакт и ИНН можно не присылать вовсе
+  const minimal = {
+    email: 'hr2@example.org',
+    password: 'Smoke12345!',
+    industry: null,
+    city: null,
+    phone: '+7 900 111-22-33',
+    consent: true,
+    terms: true,
+  };
+  assert.equal(companyRegistrationSchema.safeParse(minimal).success, true);
 });
 
 console.log('\nЧасы по дням');
@@ -186,12 +197,17 @@ test('адрес в подсказке скрыт, домен виден', () =>
   assert.equal(maskEmail('alice@mail.ru'), 'a***@mail.ru');
   assert.equal(maskEmail('не адрес'), '***');
 });
-test('отклики уходят, только когда подтверждены и учёба, и почта', () => {
+test('отклики уходят, только когда подтверждены и учёба, и почта, и дозаполнен вуз', () => {
   const at = new Date();
-  assert.equal(applicationsOpen({ studyVerified: true }, { emailVerifiedAt: at }), true);
-  assert.equal(applicationsOpen({ studyVerified: true }, { emailVerifiedAt: null }), false);
-  assert.equal(applicationsOpen({ studyVerified: false }, { emailVerifiedAt: at }), false);
-  assert.equal(applicationsOpen({ studyVerified: true }, null), false);
+  const filled = { university: 'КФУ', speciality: 'Экономика', studyYear: 2 };
+  const unfilled = { university: '', speciality: '', studyYear: 0 };
+  assert.equal(applicationsOpen({ studyVerified: true, ...filled }, { emailVerifiedAt: at }), true);
+  assert.equal(applicationsOpen({ studyVerified: true, ...filled }, { emailVerifiedAt: null }), false);
+  assert.equal(applicationsOpen({ studyVerified: false, ...filled }, { emailVerifiedAt: at }), false);
+  assert.equal(applicationsOpen({ studyVerified: true, ...filled }, null), false);
+  // Упрощённая регистрация могла не спросить вуз — до дозаполнения в
+  // профиле отклики ждут, как и без подтверждения учёбы или почты
+  assert.equal(applicationsOpen({ studyVerified: true, ...unfilled }, { emailVerifiedAt: at }), false);
 });
 test('письмо с кодом: код в теме, тексте и HTML', () => {
   const mail = emailCodeMail({ code: '042917', minutes: 30 });

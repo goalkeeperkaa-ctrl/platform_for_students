@@ -6,6 +6,8 @@ import { SESSION_COOKIE, sessionCookieOptions, signSession } from '@/lib/securit
 import { profileUpdateSchema } from '@/lib/validation';
 import { track } from '@/lib/analytics';
 import { COMPLETE_PROFILE_PERCENT, profileCompleteness } from '@/lib/portfolio';
+import { releasePendingApplications } from '@/lib/services';
+import { EDUCATION_PLACEHOLDER, EDUCATION_PLACEHOLDER_YEAR, hasEducation } from '@/lib/study';
 import type { SessionUser } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -38,7 +40,9 @@ export async function PATCH(request: Request) {
     if (requestedInstitution && !institution) {
       return fail(400, 'Проверьте заполнение полей', 'VALIDATION', { university: 'Выберите вуз из списка заново' });
     }
-    const university = institution ? (institution.shortName ?? institution.name) : input.university;
+    const university = institution
+      ? (institution.shortName ?? institution.name)
+      : (input.university ?? EDUCATION_PLACEHOLDER);
 
     // Подтверждали учёбу в конкретном вузе: сменился вуз — отметка больше
     // ни о чём не говорит
@@ -58,8 +62,8 @@ export async function PATCH(request: Request) {
       university,
       institutionId: institution?.id ?? null,
       studyVerified: resetVerification ? false : undefined,
-      speciality: input.speciality,
-      studyYear: input.studyYear,
+      speciality: input.speciality ?? EDUCATION_PLACEHOLDER,
+      studyYear: input.studyYear ?? EDUCATION_PLACEHOLDER_YEAR,
       city: input.city || null,
       workDays: input.workDays,
       hoursPerWeek: input.hoursPerWeek,
@@ -99,6 +103,13 @@ export async function PATCH(request: Request) {
       profileCompleteness(updated).percent >= COMPLETE_PROFILE_PERCENT
     ) {
       await track('student.profile.completed', { studentId: student.id });
+    }
+
+    // Вуз/специальность/курс дозаполнили только что — отклики, ждавшие
+    // именно этого, уходят работодателям сразу, а не только после
+    // следующего подтверждения учёбы или почты
+    if (!hasEducation(student) && hasEducation(updated)) {
+      await releasePendingApplications(student.id);
     }
 
     return ok({ name, studyVerified: updated.studyVerified });

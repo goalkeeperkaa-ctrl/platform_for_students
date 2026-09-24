@@ -1,5 +1,12 @@
 import { fail, handle, ok } from '@/lib/api';
-import { assertEmailVerified, assertSameOrigin, audit, HttpError, requireEmployer } from '@/lib/security/guards';
+import {
+  assertCompanyProfileComplete,
+  assertEmailVerified,
+  assertSameOrigin,
+  audit,
+  HttpError,
+  requireEmployer,
+} from '@/lib/security/guards';
 import {
   SUBMITTABLE_STATUSES,
   statusAfterEdit,
@@ -35,12 +42,15 @@ async function ownVacancy(id: string) {
 export async function PATCH(request: Request, { params }: Params) {
   return handle(async () => {
     assertSameOrigin(request);
-    const { session, store, vacancy } = await ownVacancy(params.id);
+    const { session, employer, store, vacancy } = await ownVacancy(params.id);
 
     const body: unknown = await request.json();
     const { submit } = vacancySaveSchema.parse(body);
     const input = vacancyInputSchema.parse(body);
-    if (submit) await assertEmailVerified(session.accountId);
+    if (submit) {
+      await assertEmailVerified(session.accountId);
+      assertCompanyProfileComplete(employer);
+    }
 
     const status = statusAfterEdit(vacancy.status, submit);
     const updated = await store.vacancies.update(vacancy.id, {
@@ -66,7 +76,7 @@ export async function PATCH(request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   return handle(async () => {
     assertSameOrigin(request);
-    const { session, store, vacancy } = await ownVacancy(params.id);
+    const { session, employer, store, vacancy } = await ownVacancy(params.id);
     const { action } = vacancyActionSchema.parse(await request.json());
 
     if (action === 'close') {
@@ -82,6 +92,7 @@ export async function POST(request: Request, { params }: Params) {
       return fail(409, 'Вакансия уже опубликована', 'ALREADY_PUBLISHED');
     }
     await assertEmailVerified(session.accountId);
+    assertCompanyProfileComplete(employer);
 
     const updated = await store.vacancies.update(vacancy.id, {
       status: 'PENDING',

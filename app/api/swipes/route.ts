@@ -54,7 +54,8 @@ export async function POST(request: Request) {
       if (!open && !existing) {
         await audit(session, { action: 'application.pending', entity: 'Vacancy', entityId: vacancyId }, request.headers);
         // Чего ждём — чтобы подсказка на экране называла нужный шаг
-        return ok({ applied: false, pending: true, reason: student.studyVerified ? 'EMAIL' : 'STUDY' });
+        const reason = !student.studyVerified ? 'STUDY' : !account?.emailVerifiedAt ? 'EMAIL' : 'PROFILE';
+        return ok({ applied: false, pending: true, reason });
       }
 
       const application = await store.applications.upsert({ studentId: student.id, vacancyId });

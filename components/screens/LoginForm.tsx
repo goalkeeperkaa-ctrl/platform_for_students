@@ -4,23 +4,21 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, KeyRound, User } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { TextField } from '@/components/ui/Field';
 import { Logo } from '@/components/brand/Logo';
 import { useToast } from '@/components/ui/Toast';
-import { durations, easeOutExpo, springSnappy, stepVariants } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-
-type Mode = 'account' | 'code';
+import { durations, easeOutExpo } from '@/lib/motion';
 
 /**
  * Вход.
  *
- * Две двери в одном экране: студент и HR-менеджер входят по паролю,
- * работодатель — по коду из CRM, потому что регистрации у него нет.
- * Разделять это на две страницы значило бы заставить человека сначала
- * угадать, кто он в этой системе.
+ * Один способ на всех: студент, компания и HR-менеджер входят по почте
+ * и паролю. Раньше здесь была вторая вкладка «Код из CRM» для клиентов
+ * агентства без своей регистрации — теперь клиент попадает в кабинет
+ * прямой ссылкой из CRM (готовая сессия, вводить нечего), а код остался
+ * бы дублирующим, никому не нужным путём входа.
  */
 interface DemoHint {
   student: { email: string; password: string };
@@ -42,10 +40,8 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
   const params = useSearchParams();
   const toast = useToast();
 
-  const [mode, setMode] = useState<Mode>(params.get('role') === 'employer' ? 'code' : 'account');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,9 +75,7 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    return mode === 'account'
-      ? signIn('/api/auth/login', { email, password })
-      : signIn('/api/auth/employer', { code });
+    return signIn('/api/auth/login', { email, password });
   }
 
   return (
@@ -120,66 +114,34 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         )}
 
         <div className="glass rounded-3xl p-6 sm:p-8">
-          <div className="flex rounded-2xl border border-[var(--hairline)] bg-graphite-950/60 p-1">
-            <ModeTab active={mode === 'account'} onClick={() => setMode('account')} icon={<User className="size-3.5" />}>
-              По почте
-            </ModeTab>
-            <ModeTab active={mode === 'code'} onClick={() => setMode('code')} icon={<KeyRound className="size-3.5" />}>
-              Код из CRM
-            </ModeTab>
-          </div>
-
-          <form onSubmit={submit} className="mt-6">
-            <AnimatePresence mode="wait" initial={false} custom={mode === 'code' ? 1 : -1}>
-              <motion.div
-                key={mode}
-                custom={mode === 'code' ? 1 : -1}
-                variants={stepVariants}
-                initial="hidden"
-                animate="show"
-                exit="exit"
-                className="space-y-3"
-              >
-                {mode === 'account' ? (
-                  <>
-                    <TextField
-                      label="Почта"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                    <TextField
-                      label="Пароль"
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <div className="flex justify-end">
-                      <Link
-                        href="/forgot"
-                        className="text-[12.5px] text-paper-faint underline-offset-4 transition-colors hover:text-paper hover:underline"
-                      >
-                        Забыли пароль?
-                      </Link>
-                    </div>
-                  </>
-                ) : (
-                  <TextField
-                    label="Код доступа из CRM"
-                    autoComplete="one-time-code"
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    hint="Код выдаёт ваш аккаунт-менеджер в Fattakhov HR Agency"
-                    className="[&_input]:tracking-[0.18em]"
-                  />
-                )}
-              </motion.div>
-            </AnimatePresence>
+          <form onSubmit={submit}>
+            <div className="space-y-3">
+              <TextField
+                label="Почта"
+                type="email"
+                autoComplete="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <TextField
+                label="Пароль"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <div className="flex justify-end">
+                <Link
+                  href="/forgot"
+                  className="text-[12.5px] text-paper-faint underline-offset-4 transition-colors hover:text-paper hover:underline"
+                >
+                  Забыли пароль?
+                </Link>
+              </div>
+            </div>
 
             <AnimatePresence>
               {error && (
@@ -266,38 +228,5 @@ export function LoginForm({ demoHint }: { demoHint?: DemoHint }) {
         </p>
       </motion.div>
     </div>
-  );
-}
-
-function ModeTab({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'relative flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors duration-300',
-        active ? 'text-paper' : 'text-paper/50 hover:text-paper/80',
-      )}
-    >
-      {active && (
-        <motion.span
-          layoutId="login-tab"
-          transition={springSnappy}
-          className="absolute inset-0 rounded-xl border border-[var(--hairline-strong)] bg-paper/[0.08]"
-        />
-      )}
-      <span className="relative">{icon}</span>
-      <span className="relative">{children}</span>
-    </button>
   );
 }

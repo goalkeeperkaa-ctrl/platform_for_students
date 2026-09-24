@@ -86,14 +86,35 @@ export const companyProfileSchema = z.object({
 
 export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
 
+/**
+ * Плейсхолдер названия/контакта компании до дозаполнения в кабинете.
+ * Колонки в базе обязательные (NOT NULL) — регистрацию упростили до
+ * почты/телефона и пароля, а название, контакт и ИНН просят уже в
+ * кабинете, перед тем как отправить вакансию на проверку.
+ */
+export const COMPANY_PLACEHOLDER = '';
+
+/** Дозаполнены ли название компании, контакт и ИНН — нужны для проверки агентством. */
+export function hasCompanyProfile(employer: {
+  companyName: string;
+  contactName: string;
+  inn: string | null;
+}): boolean {
+  return (
+    employer.companyName.trim().length > 0 &&
+    employer.contactName.trim().length > 0 &&
+    Boolean(employer.inn)
+  );
+}
+
 export const companyRegistrationSchema = z.object({
-  companyName,
-  contactName,
+  companyName: z.preprocess((v) => (v === undefined ? null : emptyToNull(v)), companyName.nullable()),
+  contactName: z.preprocess((v) => (v === undefined ? null : emptyToNull(v)), contactName.nullable()),
   email: emailSchema,
   password: passwordSchema,
   industry: optionalText(80),
   city: optionalText(80),
-  inn: innSchema,
+  inn: z.preprocess((v) => (v === undefined ? null : emptyToNull(v)), innSchema.nullable()),
   phone: requiredPhoneSchema,
   ...consentFields(),
 });

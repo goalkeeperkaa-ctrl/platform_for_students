@@ -2,6 +2,7 @@ import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getStore } from '@/lib/db';
+import { hasCompanyProfile } from '@/lib/company';
 import type { Role, SessionUser } from '@/lib/types';
 import { SESSION_COOKIE, verifySession } from './session';
 import { staffCan, type StaffPermission } from '@/lib/staff-permissions';
@@ -88,6 +89,26 @@ export async function assertEmailVerified(accountId: string): Promise<void> {
       403,
       'Сначала подтвердите почту — код пришёл в письме. Отправить его снова можно вверху страницы.',
       'EMAIL_NOT_VERIFIED',
+    );
+  }
+}
+
+/**
+ * Отправка вакансии на проверку требует названия компании, контакта и
+ * ИНН — без них HR-менеджеру нечего сверять с госреестром. Регистрация
+ * их больше не требует, поэтому это отдельная проверка перед отправкой,
+ * а не условие входа в кабинет.
+ */
+export function assertCompanyProfileComplete(employer: {
+  companyName: string;
+  contactName: string;
+  inn: string | null;
+}): void {
+  if (!hasCompanyProfile(employer)) {
+    throw new HttpError(
+      403,
+      'Сначала укажите название компании, контакт и ИНН в разделе «Компания» — по ним агентство проверяет вакансию.',
+      'COMPANY_PROFILE_INCOMPLETE',
     );
   }
 }

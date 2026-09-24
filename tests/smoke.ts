@@ -849,7 +849,9 @@ async function main() {
     typeof boardStudent?.age === 'number' && boardStudent?.birthDate === null,
     boardStudent && { age: boardStudent.age, birthDate: boardStudent.birthDate },
   );
-  check('на регистрации есть справочник вузов', String((await new Session().request('/register')).body).includes('КНИТУ'));
+  // Справочник вузов убрали из регистрации — вуз выбирают в профиле после неё
+  check('на регистрации справочника вузов нет', !String((await new Session().request('/register')).body).includes('КНИТУ'));
+  check('справочник вузов есть в профиле', String((await owner.request('/profile')).body).includes('КНИТУ'));
 
   const erased = await owner.delete('/api/students/me', {});
   check('профиль удаляется', erased.status === 200, erased.body);

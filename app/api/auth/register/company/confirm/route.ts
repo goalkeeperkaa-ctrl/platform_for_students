@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { fail, handle, ok, tooManyRequests } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { COMPANY_PLACEHOLDER } from '@/lib/company';
 import { getStore, isAccountExistsError, isInnExistsError } from '@/lib/db';
 import { COMPANY_CONSENT_VERSION, TERMS_VERSION } from '@/lib/legal';
 import { confirmPendingRegistration, type PendingEmployerData } from '@/lib/pending-registration';
@@ -46,8 +47,11 @@ export async function POST(request: Request) {
       const { account, employer } = await store.employers.createWithAccount({
         email: input.email,
         password: input.password,
-        companyName: input.companyName,
-        contactName: input.contactName,
+        // Название, контакт и ИНН теперь дозаполняются в кабинете — если
+        // ещё не заполнены, пишем плейсхолдер вместо NULL (колонки в базе
+        // обязательные)
+        companyName: input.companyName ?? COMPANY_PLACEHOLDER,
+        contactName: input.contactName ?? COMPANY_PLACEHOLDER,
         industry: input.industry,
         city: input.city,
         inn: input.inn,
@@ -63,7 +67,7 @@ export async function POST(request: Request) {
         accountId: account.id,
         role: 'EMPLOYER',
         profileId: employer.id,
-        name: employer.companyName,
+        name: employer.companyName || 'Новая компания',
       };
       cookies().set(SESSION_COOKIE, await signSession(session), sessionCookieOptions);
 
