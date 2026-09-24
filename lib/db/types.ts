@@ -329,7 +329,8 @@ export interface NewEmployerInput {
   contactName: string;
   industry: string | null;
   city: string | null;
-  inn: string;
+  /** Необязателен: самостоятельная регистрация может пройти без него, дозаполняется в кабинете */
+  inn: string | null;
   /** Открытым текстом — хранилище шифрует */
   phone: string;
   consentVersion: string;
