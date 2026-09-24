@@ -66,7 +66,7 @@ export function CompanyRegistrationForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const payload = { ...form, city: form.city || null, industry: null };
+    const payload = { ...form, city: form.city || null };
 
     const parsed = companyRegistrationSchema.safeParse(payload);
     if (!parsed.success) {

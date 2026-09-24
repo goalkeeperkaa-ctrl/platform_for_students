@@ -27,9 +27,7 @@ export interface CompanyFormState {
   phone: string;
   inn: string;
   logoUrl: string | null;
-  industry: string;
   about: string;
-  culture: string;
   website: string;
   city: string;
   socials: LinkItem[];
@@ -82,9 +80,7 @@ export function CompanyEditor({
   async function save() {
     const payload = {
       ...form,
-      industry: form.industry || null,
       about: form.about || null,
-      culture: form.culture || null,
       website: form.website || null,
       city: form.city || null,
       videoUrl: form.videoUrl || null,
@@ -176,20 +172,12 @@ export function CompanyEditor({
               }
               onChange={(e) => patch({ companyName: e.target.value })}
             />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextField
-                label="Отрасль"
-                value={form.industry}
-                error={errors.industry}
-                onChange={(e) => patch({ industry: e.target.value })}
-              />
-              <TextField
-                label="Город"
-                value={form.city}
-                error={errors.city}
-                onChange={(e) => patch({ city: e.target.value })}
-              />
-            </div>
+            <TextField
+              label="Город"
+              value={form.city}
+              error={errors.city}
+              onChange={(e) => patch({ city: e.target.value })}
+            />
             <TextAreaField
               label="Коротко о компании"
               value={form.about}
@@ -197,14 +185,6 @@ export function CompanyEditor({
               error={errors.about}
               hint="Чем занимаетесь, где работаете, кого ищете среди студентов."
               onChange={(e) => patch({ about: e.target.value })}
-            />
-            <TextAreaField
-              label="Что важно в культуре и команде"
-              value={form.culture}
-              maxCount={1000}
-              error={errors.culture}
-              hint="Наставничество, график, как растут люди, чем гордитесь."
-              onChange={(e) => patch({ culture: e.target.value })}
             />
           </div>
         </Section>

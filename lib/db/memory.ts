@@ -730,7 +730,6 @@ export async function createMemoryStore(): Promise<DataStore> {
           ...structuredClone(EMPTY_COMPANY),
           inn: input.inn,
           phoneEnc: encrypt(input.phone),
-          industry: input.industry,
           city: input.city,
           // Статус ставит хранилище, а не форма
           moderationStatus: 'PENDING',
@@ -987,6 +986,24 @@ export async function createMemoryStore(): Promise<DataStore> {
           studentId,
           vacancyId,
           status: 'NEW',
+          employerNote: null,
+          statusChangedAt: now(),
+          createdAt: now(),
+          lastMessageAt: null,
+        };
+        t.applications.push(record);
+        return clone(record);
+      },
+      async createInvite({ studentId, vacancyId }) {
+        const existing = t.applications.find(
+          (a) => a.studentId === studentId && a.vacancyId === vacancyId,
+        );
+        if (existing) return null;
+        const record: ApplicationRecord = {
+          id: randomUUID(),
+          studentId,
+          vacancyId,
+          status: 'INVITED',
           employerNote: null,
           statusChangedAt: now(),
           createdAt: now(),

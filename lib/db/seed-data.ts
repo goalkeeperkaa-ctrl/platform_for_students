@@ -551,14 +551,9 @@ export { STUDENT_CONSENT_VERSION as CONSENT_VERSION } from '@/lib/legal';
  * Страница компании у демо-клиента. Без неё публичная страница на демо
  * была бы пустой, и по ней нельзя было бы понять, как её видит студент.
  */
-export const DEMO_COMPANY_PROFILES: Record<
-  string,
-  { industry: string; about: string; culture: string; city: string }
-> = {
+export const DEMO_COMPANY_PROFILES: Record<string, { about: string; city: string }> = {
   'client-sever': {
-    industry: 'Кофейни и общепит',
     about: 'Небольшая сеть спешелти-кофеен в центре Казани. Обучаем бариста с нуля и растим управляющих из своих сотрудников.',
-    culture: 'Смены под учёбу, наставник на первые недели, прозрачный рост от бариста до управляющего.',
     city: 'Казань',
   },
 };

@@ -188,7 +188,7 @@ function CompanyCard({
   onDecide: Decide;
 }) {
   const website = company.website && /^https?:\/\//i.test(company.website) ? company.website : null;
-  const meta = [company.industry, company.city].filter(Boolean).join(' · ');
+  const meta = company.city ?? '';
 
   return (
     <article className="surface rounded-3xl p-5 sm:p-6">

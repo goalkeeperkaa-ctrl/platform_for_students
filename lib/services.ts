@@ -32,6 +32,7 @@ import {
   type SyncRunDTO,
   type VacancyDTO,
   type PendingApplicationDTO,
+  type StudentProfileDTO,
   type StudyStateDTO,
 } from '@/lib/types';
 
@@ -410,9 +411,7 @@ export async function getCompanyPublic(employerId: string): Promise<CompanyPubli
     id: employer.id,
     companyName: employer.companyName,
     logoUrl: employer.logoUrl,
-    industry: employer.industry,
     about: employer.about,
-    culture: employer.culture,
     website: employer.website,
     city: employer.city,
     socials: employer.socials,
@@ -459,6 +458,69 @@ export async function getEmployerVacancy(employerId: string, id: string): Promis
   return vacancy && vacancy.employerId === employerId ? vacancy : null;
 }
 
+/**
+ * Кандидаты на конкретную вакансию — раздел «Кандидаты», обратная сторона
+ * ленты студента: здесь не студент выбирает вакансию, а работодатель сам
+ * выбирает, кого позвать.
+ *
+ * Показываются только подтверждённые агентством студенты, кроме тех, кто
+ * поставил поиск на паузу или уже трудоустроен, и без тех, по кому решение
+ * по этой вакансии уже есть — свайп на того же человека дважды ничего
+ * нового не решает. Контакты скрыты: они открываются так же, как и
+ * откликнувшемуся, — после того, как отклик появился (здесь — после
+ * приглашения).
+ */
+export async function listCandidatesForVacancy(
+  employerId: string,
+  vacancyId: string,
+): Promise<{ vacancy: { id: string; title: string }; candidates: StudentProfileDTO[] } | null> {
+  const store = await getStore();
+  const vacancy = await store.vacancies.findById(vacancyId);
+  if (!vacancy || vacancy.employerId !== employerId) return null;
+
+  const [students, applications] = await Promise.all([
+    store.students.list(),
+    store.applications.listByVacancyIds([vacancyId]),
+  ]);
+  const decided = new Set(applications.map((a) => a.studentId));
+
+  const eligible = students.filter(
+    (s) => s.studyVerified && s.status !== 'PAUSED' && s.status !== 'PLACED' && !decided.has(s.id),
+  );
+
+  return {
+    vacancy: { id: vacancy.id, title: vacancy.title },
+    candidates: eligible.map((s) => toStudentDTO(s, '', { includeContacts: false })),
+  };
+}
+
+/**
+ * Пригласить кандидата на вакансию — свайп вправо в «Кандидатах».
+ *
+ * В отличие от отклика студента, здесь нет предшествующего свайпа: сам
+ * отклик и есть решение работодателя, поэтому создаётся сразу со статусом
+ * «Приглашение», а не «Новый». null, если по этой паре уже есть отклик —
+ * например, студент откликнулся сам, пока работодатель листал колоду.
+ */
+export async function inviteCandidate(
+  employerId: string,
+  vacancyId: string,
+  studentId: string,
+): Promise<'INVITED' | 'ALREADY_DECIDED' | 'NOT_FOUND'> {
+  const store = await getStore();
+  const [vacancy, student] = await Promise.all([
+    store.vacancies.findById(vacancyId),
+    store.students.findById(studentId),
+  ]);
+  if (!vacancy || vacancy.employerId !== employerId || !student) return 'NOT_FOUND';
+
+  const invite = await store.applications.createInvite({ studentId, vacancyId });
+  if (!invite) return 'ALREADY_DECIDED';
+
+  await track('application.created', { employerId, vacancyId, studentId });
+  return 'INVITED';
+}
+
 export interface ModerationQueue {
   companies: ModerationCompanyDTO[];
   vacancies: ModerationVacancyDTO[];
@@ -489,7 +551,6 @@ export async function buildModerationQueue(): Promise<ModerationQueue> {
       phone: decryptSafe(employer.phoneEnc, '') || null,
       freeEmail: isFreeEmail(account ? decryptSafe(account.emailEnc) : ''),
       logoUrl: employer.logoUrl,
-      industry: employer.industry,
       city: employer.city,
       about: employer.about,
       website: employer.website,

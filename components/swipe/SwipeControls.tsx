@@ -19,6 +19,7 @@ export function SwipeControls({
   onUndo,
   canUndo,
   disabled,
+  labels = { skip: 'Пропустить вакансию', undo: 'Вернуть предыдущую вакансию', apply: 'Откликнуться на вакансию' },
 }: {
   progress: MotionValue<number>;
   onSkip: () => void;
@@ -26,6 +27,8 @@ export function SwipeControls({
   onUndo: () => void;
   canUndo: boolean;
   disabled?: boolean;
+  /** Подписи для скринридера — по умолчанию под ленту студента, для других колод переопределяются */
+  labels?: { skip: string; undo: string; apply: string };
 }) {
   const skipScale = useTransform(progress, [-1, 0], [1.16, 1]);
   const skipGlow = useTransform(progress, [-1, -0.1], [1, 0]);
@@ -38,7 +41,7 @@ export function SwipeControls({
         type="button"
         onClick={onSkip}
         disabled={disabled}
-        aria-label="Пропустить вакансию"
+        aria-label={labels.skip}
         style={{ scale: skipScale }}
         whileHover={{ y: -2 }}
         whileTap={{ scale: 0.9 }}
@@ -61,7 +64,7 @@ export function SwipeControls({
         type="button"
         onClick={onUndo}
         disabled={disabled || !canUndo}
-        aria-label="Вернуть предыдущую вакансию"
+        aria-label={labels.undo}
         whileHover={{ y: -2, rotate: -18 }}
         whileTap={{ scale: 0.9 }}
         transition={springSnappy}
@@ -74,7 +77,7 @@ export function SwipeControls({
         type="button"
         onClick={onApply}
         disabled={disabled}
-        aria-label="Откликнуться на вакансию"
+        aria-label={labels.apply}
         style={{ scale: applyScale }}
         whileHover={{ y: -2 }}
         whileTap={{ scale: 0.9 }}

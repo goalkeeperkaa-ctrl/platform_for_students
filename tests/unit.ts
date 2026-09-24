@@ -87,7 +87,6 @@ test('регистрация компании требует телефон и �
     contactName: 'Иван Иванов',
     email: 'hr@example.org',
     password: 'Smoke12345!',
-    industry: null,
     city: 'Казань',
     inn: '7707083893',
     phone: '+7 900 111-22-33',
@@ -102,7 +101,6 @@ test('регистрация компании требует телефон и �
   const minimal = {
     email: 'hr2@example.org',
     password: 'Smoke12345!',
-    industry: null,
     city: null,
     phone: '+7 900 111-22-33',
     consent: true,

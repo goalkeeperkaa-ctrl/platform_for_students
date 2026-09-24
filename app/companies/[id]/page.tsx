@@ -58,7 +58,7 @@ export default async function CompanyPage({ params }: Props) {
           <div className="flex min-w-0 items-start gap-4">
             <Avatar name={company.companyName} src={company.logoUrl} size={72} rounded="square" />
             <div className="min-w-0">
-              <p className="text-eyebrow uppercase text-paper-faint">{company.industry ?? 'Компания'}</p>
+              <p className="text-eyebrow uppercase text-paper-faint">Компания</p>
               <h1 className="mt-1 break-words text-display-sm text-paper">{company.companyName}</h1>
               {company.city && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[13.5px] text-paper-dim">
@@ -90,13 +90,6 @@ export default async function CompanyPage({ params }: Props) {
             </div>
           )}
         </section>
-
-        {company.culture && (
-          <section className="glass mt-6 rounded-3xl p-6 sm:p-8">
-            <h2 className="text-eyebrow uppercase text-paper-faint">Что важно в культуре и команде</h2>
-            <p className="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-paper-dim">{company.culture}</p>
-          </section>
-        )}
 
         {company.photos.length > 0 && (
           <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Фото компании">

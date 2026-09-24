@@ -52,7 +52,6 @@ export async function POST(request: Request) {
         // обязательные)
         companyName: input.companyName ?? COMPANY_PLACEHOLDER,
         contactName: input.contactName ?? COMPANY_PLACEHOLDER,
-        industry: input.industry,
         city: input.city,
         inn: input.inn,
         phone: input.phone,

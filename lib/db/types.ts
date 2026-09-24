@@ -327,7 +327,6 @@ export interface NewEmployerInput {
   password: string;
   companyName: string;
   contactName: string;
-  industry: string | null;
   city: string | null;
   /** Необязателен: самостоятельная регистрация может пройти без него, дозаполняется в кабинете */
   inn: string | null;
@@ -343,9 +342,7 @@ export interface CompanyProfileUpdate {
   companyName: string;
   contactName: string;
   logoUrl: string | null;
-  industry: string | null;
   about: string | null;
-  culture: string | null;
   website: string | null;
   city: string | null;
   socials: LinkItem[];
@@ -573,6 +570,13 @@ export interface DataStore {
 
   applications: {
     upsert(input: { studentId: string; vacancyId: string }): Promise<ApplicationRecord>;
+    /**
+     * Приглашение по инициативе работодателя — из раздела «Кандидаты».
+     * null, если отклик по этой паре уже есть: студент мог откликнуться
+     * сам, пока работодатель листал колоду, и это тогда уже полноценный
+     * отклик, а не приглашение поверх него.
+     */
+    createInvite(input: { studentId: string; vacancyId: string }): Promise<ApplicationRecord | null>;
     listByStudent(studentId: string): Promise<ApplicationRecord[]>;
     listByVacancyIds(vacancyIds: string[]): Promise<ApplicationRecord[]>;
     listAll(): Promise<ApplicationRecord[]>;

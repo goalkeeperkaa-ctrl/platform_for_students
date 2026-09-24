@@ -13,6 +13,10 @@ export interface NavItem {
   /** Подсвечивать только на точном совпадении. Нужно корневому разделу,
    *  чей путь является префиксом всех остальных. */
   exact?: boolean;
+  /** Иконка вместо текста — label остаётся для aria-label и подсказки при наведении. */
+  icon?: React.ReactNode;
+  /** Показать только иконку, без видимого текста рядом. */
+  hideLabel?: boolean;
 }
 
 /**
@@ -38,8 +42,11 @@ export function NavTabs({ items, className }: { items: NavItem[]; className?: st
             href={item.href}
             data-tour={'nav:' + item.href}
             aria-current={active ? 'page' : undefined}
+            aria-label={item.hideLabel ? item.label : undefined}
+            title={item.hideLabel ? item.label : undefined}
             className={cn(
               'relative flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors duration-300',
+              item.hideLabel && 'px-3',
               active ? 'text-paper' : 'text-paper/55 hover:text-paper/85',
             )}
           >
@@ -50,7 +57,8 @@ export function NavTabs({ items, className }: { items: NavItem[]; className?: st
                 className="absolute inset-0 rounded-full border border-[var(--hairline-strong)] bg-paper/[0.09]"
               />
             )}
-            <span className="relative whitespace-nowrap">{item.label}</span>
+            {item.icon && <span className="relative flex shrink-0 items-center">{item.icon}</span>}
+            <span className={cn('relative whitespace-nowrap', item.hideLabel && 'sr-only')}>{item.label}</span>
             {item.badge !== undefined && item.badge > 0 && (
               <span
                 className={cn(

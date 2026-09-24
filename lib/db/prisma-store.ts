@@ -294,7 +294,6 @@ export function createPrismaStore(): DataStore {
                 create: {
                   companyName: input.companyName,
                   contactName: input.contactName,
-                  industry: input.industry,
                   city: input.city,
                   inn: input.inn,
                   phoneEnc: encrypt(input.phone),
@@ -329,9 +328,7 @@ export function createPrismaStore(): DataStore {
             companyName: input.companyName,
             contactName: input.contactName,
             logoUrl: input.logoUrl,
-            industry: input.industry,
             about: input.about,
-            culture: input.culture,
             website: input.website,
             city: input.city,
             socials: json(input.socials),
@@ -504,6 +501,16 @@ export function createPrismaStore(): DataStore {
           // мог уже позвать человека на собеседование.
           update: {},
         }),
+      async createInvite({ studentId, vacancyId }) {
+        try {
+          return await prisma.application.create({
+            data: { studentId, vacancyId, status: 'INVITED', statusChangedAt: new Date() },
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return null;
+          throw err;
+        }
+      },
       listByStudent: (studentId) =>
         prisma.application.findMany({ where: { studentId }, orderBy: { createdAt: 'desc' } }),
       listByVacancyIds: (vacancyIds) =>

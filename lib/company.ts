@@ -70,9 +70,7 @@ export const companyProfileSchema = z.object({
   companyName,
   contactName,
   logoUrl: z.preprocess(emptyToNull, companyFileUrlSchema.nullable()),
-  industry: optionalText(80),
   about: optionalText(1500),
-  culture: optionalText(1000),
   website: z.preprocess(emptyToNull, httpUrlSchema.nullable()),
   city: optionalText(80),
   socials: z.array(linkItemSchema).max(8, 'Не больше 8 ссылок'),
@@ -112,7 +110,6 @@ export const companyRegistrationSchema = z.object({
   contactName: z.preprocess((v) => (v === undefined ? null : emptyToNull(v)), contactName.nullable()),
   email: emailSchema,
   password: passwordSchema,
-  industry: optionalText(80),
   city: optionalText(80),
   inn: z.preprocess((v) => (v === undefined ? null : emptyToNull(v)), innSchema.nullable()),
   phone: requiredPhoneSchema,
@@ -132,9 +129,7 @@ export function readCompanyProfile(row: {
   companyName: string;
   contactName: string;
   logoUrl?: string | null;
-  industry?: string | null;
   about?: string | null;
-  culture?: string | null;
   website?: string | null;
   city?: string | null;
   socials?: unknown;
@@ -166,9 +161,7 @@ export function readCompanyProfile(row: {
     companyName: row.companyName,
     contactName: row.contactName,
     logoUrl: file(row.logoUrl),
-    industry: text(row.industry),
     about: text(row.about),
-    culture: text(row.culture),
     website: url(row.website),
     city: text(row.city),
     socials,

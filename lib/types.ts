@@ -108,16 +108,14 @@ export const VACANCY_STATUS_LABEL: Record<VacancyStatus, string> = {
 /**
  * Страница компании — то, что студент видит о работодателе помимо вакансии.
  *
- * Карточка на доске Miro: название, логотип, отрасль, «о компании»,
- * сайт и соцсети, фото и видео, что важно в культуре и команде.
+ * Карточка на доске Miro: название, логотип, «о компании», сайт и
+ * соцсети, фото и видео.
  */
 export interface CompanyProfile {
   companyName: string;
   contactName: string;
   logoUrl: string | null;
-  industry: string | null;
   about: string | null;
-  culture: string | null;
   website: string | null;
   city: string | null;
   socials: LinkItem[];
@@ -385,7 +383,6 @@ export interface ModerationCompanyDTO {
   /** Почта на публичном сервисе, а не на домене компании */
   freeEmail: boolean;
   logoUrl: string | null;
-  industry: string | null;
   city: string | null;
   about: string | null;
   website: string | null;
