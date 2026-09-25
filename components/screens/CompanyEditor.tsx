@@ -47,12 +47,15 @@ export function CompanyEditor({
   companyId,
   moderation,
   selfRegistered,
+  crmLink,
 }: {
   initial: CompanyFormState;
   companyId: string;
   moderation: { status: ModerationStatus; note: string | null };
   /** Зарегистрировалась сама, а не пришла из CRM — смена названия вернёт на проверку */
   selfRegistered: boolean;
+  /** Объединена ли страница с профилем в CRM — и если нет, что с заявкой на это. */
+  crmLink: { linked: true } | { linked: false; requestedAt: string | null; note: string | null };
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -146,6 +149,11 @@ export function CompanyEditor({
       </header>
 
       <ModerationBanner status={moderation.status} note={moderation.note} companyId={companyId} />
+      {crmLink.linked ? (
+        <CrmEnterPanel />
+      ) : (
+        <CrmLinkPanel requestedAt={crmLink.requestedAt} note={crmLink.note} />
+      )}
 
       <div className="mt-8 space-y-8">
         <Section title="Логотип">
@@ -428,6 +436,101 @@ function ModerationBanner({
         Пока студенты не видят ни страницу, ни вакансии. Заполните страницу сейчас — после
         одобрения она появится сразу целиком.
       </p>
+    </div>
+  );
+}
+
+/** Страница объединена с профилем в CRM — переход туда тем же паролем. */
+function CrmEnterPanel() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--hairline)] bg-graphite-950/40 p-4">
+      <div>
+        <p className="text-[13.5px] font-medium text-paper">Профиль объединён с CRM агентства</p>
+        <p className="mt-1 text-[12.5px] text-paper-dim">Тот же вход, без второго пароля.</p>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        icon={<ExternalLink />}
+        onClick={() => {
+          window.location.href = '/api/employer/crm-enter';
+        }}
+      >
+        Войти в CRM
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Заявка «у нас уже есть профиль в CRM, объедините» — для компаний,
+ * зарегистрированных здесь самостоятельно. Решает её сотрудник CRM;
+ * здесь только отправка и то, что видно, пока решения нет.
+ */
+function CrmLinkPanel({ requestedAt, note }: { requestedAt: string | null; note: string | null }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [justSent, setJustSent] = useState(false);
+
+  if (requestedAt || justSent) {
+    return (
+      <div className="rounded-2xl border border-accent-400/35 bg-accent-500/[0.08] p-4 text-[13.5px] leading-relaxed">
+        <p className="flex items-center gap-2 font-medium text-accent-200">
+          <Clock3 className="size-4 shrink-0" aria-hidden />
+          Заявка на объединение с CRM на рассмотрении
+        </p>
+        <p className="mt-1.5 text-paper-dim">Сотрудник агентства свяжет профили — обычно это быстро.</p>
+      </div>
+    );
+  }
+
+  async function send() {
+    setSending(true);
+    try {
+      const response = await fetch('/api/employer/crm-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: text.trim() || undefined }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        toast.error(data.error ?? 'Не удалось отправить заявку');
+        return;
+      }
+      setJustSent(true);
+      toast.success('Заявка отправлена');
+      router.refresh();
+    } catch {
+      toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--hairline)] bg-graphite-950/40 p-4">
+      <p className="text-[13.5px] font-medium text-paper">Уже работаете с нами через CRM?</p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-paper-dim">
+        Оставьте заявку — агентство объединит эту страницу с вашим профилем в CRM, данные заполнять
+        заново не придётся.
+      </p>
+      {note && (
+        <p className="mt-3 rounded-xl border border-warn/30 bg-warn/[0.08] p-3 text-[12.5px] leading-relaxed text-warn">
+          По прошлой заявке: {note}
+        </p>
+      )}
+      <TextField
+        label="Комментарий"
+        value={text}
+        hint="Необязательно. Например, с кем из агентства уже общались."
+        onChange={(e) => setText(e.target.value)}
+        className="mt-3"
+      />
+      <Button size="sm" className="mt-3" loading={sending} onClick={() => void send()}>
+        Оставить заявку
+      </Button>
     </div>
   );
 }

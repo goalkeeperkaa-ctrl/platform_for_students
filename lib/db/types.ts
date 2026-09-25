@@ -116,6 +116,9 @@ export interface EmployerRecord {
   moderatedAt: Date | null;
   consentVersion: string | null;
   consentAt: Date | null;
+  /** Заявка «объедините с профилем в CRM» ещё не решена. */
+  crmLinkRequestedAt: Date | null;
+  crmLinkNote: string | null;
   createdAt: Date;
 }
 
@@ -533,6 +536,19 @@ export interface DataStore {
       contactName: string;
       contactEmail: string;
     }): Promise<EmployerRecord>;
+
+    /**
+     * Заявка «объедините с профилем в CRM» — от компании, зарегистрированной
+     * здесь самостоятельно (crmClientId ещё пуст). Решает сотрудник CRM
+     * через служебный API (см. lib/security/service-auth.ts).
+     */
+    requestCrmLink(id: string, note: string | null): Promise<EmployerRecord | null>;
+    /** Ждущие решения заявки — только не привязанные ранее. */
+    listCrmLinkRequests(): Promise<EmployerRecord[]>;
+    /** Одобрение: компания получает crmClientId, заявка гаснет. */
+    resolveCrmLink(id: string, crmClientId: string): Promise<EmployerRecord | null>;
+    /** Отказ с пояснением — заявку можно подать снова. */
+    rejectCrmLink(id: string, note: string): Promise<EmployerRecord | null>;
   };
 
   vacancies: {

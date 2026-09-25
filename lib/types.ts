@@ -390,6 +390,26 @@ export interface ModerationCompanyDTO {
   pendingVacancies: number;
 }
 
+/**
+ * Заявка компании (зарегистрированной здесь сама) на объединение с её
+ * профилем в CRM агентства. Решает сотрудник CRM через служебный API —
+ * см. app/api/service/crm-links.
+ */
+export interface CrmLinkRequestDTO {
+  employerId: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string | null;
+  inn: string | null;
+  city: string | null;
+  /** Одобрена ли страница компании агентством — сверить, что не мошенник */
+  moderationStatus: ModerationStatus;
+  /** Сообщение от компании к заявке, если оставляли */
+  note: string | null;
+  requestedAt: string;
+}
+
 /** Вакансия в очереди модерации — в том виде, в каком её увидит студент. */
 export interface ModerationVacancyDTO {
   companyId: string;

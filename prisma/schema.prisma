@@ -322,6 +322,13 @@ model Employer {
   /// Идентификатор клиента в CRM агентства — ключ синхронизации
   crmClientId String? @unique
 
+  // Заявка «у нас уже есть профиль в CRM, объедините» — от компании,
+  // зарегистрированной здесь самостоятельно. Сотрудник агентства решает
+  // её в CRM: находит или заводит клиента и проставляет crmClientId, —
+  // после чего заявка гаснет сама (не отдельным полем статуса).
+  crmLinkRequestedAt DateTime?
+  crmLinkNote        String?   @db.Text
+
   createdAt DateTime @default(now())
 
   vacancies Vacancy[]

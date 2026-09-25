@@ -23,6 +23,7 @@ import {
   type ApplicationDTO,
   type ApplicationStatus,
   type AuditEntryDTO,
+  type CrmLinkRequestDTO,
   type EmployerApplicationDTO,
   type EmployerVacancyDTO,
   type ModerationCompanyDTO,
@@ -519,6 +520,52 @@ export async function inviteCandidate(
 
   await track('application.created', { employerId, vacancyId, studentId });
   return 'INVITED';
+}
+
+/**
+ * Заявка компании «объедините с профилем в CRM» — оставляет сама
+ * компания, зарегистрированная здесь. Только для тех, кто ещё не привязан
+ * (crmClientId пуст): у клиентов CRM профиль и так один.
+ */
+export async function requestCrmLink(employerId: string, note: string | null): Promise<boolean> {
+  const store = await getStore();
+  const employer = await store.employers.findById(employerId);
+  if (!employer || employer.crmClientId) return false;
+  await store.employers.requestCrmLink(employerId, note);
+  return true;
+}
+
+/** Заявки на привязку к CRM — для служебного API (см. app/api/service). */
+export async function listCrmLinkRequests(): Promise<CrmLinkRequestDTO[]> {
+  const store = await getStore();
+  const employers = await store.employers.listCrmLinkRequests();
+  const accounts = await Promise.all(employers.map((e) => store.accounts.findById(e.accountId)));
+  return employers.map((employer, i) => ({
+    employerId: employer.id,
+    companyName: employer.companyName,
+    contactName: employer.contactName,
+    email: accounts[i] ? decryptSafe(accounts[i]!.emailEnc) : '',
+    phone: decryptSafe(employer.phoneEnc, '') || null,
+    inn: employer.inn,
+    city: employer.city,
+    moderationStatus: employer.moderationStatus,
+    note: employer.crmLinkNote,
+    requestedAt: (employer.crmLinkRequestedAt ?? employer.createdAt).toISOString(),
+  }));
+}
+
+/** Одобрить заявку — компания получает crmClientId и дальше входит как клиент CRM. */
+export async function resolveCrmLink(employerId: string, crmClientId: string): Promise<boolean> {
+  const store = await getStore();
+  const updated = await store.employers.resolveCrmLink(employerId, crmClientId);
+  return updated !== null;
+}
+
+/** Отклонить заявку с пояснением — компания увидит его и сможет подать снова. */
+export async function rejectCrmLink(employerId: string, note: string): Promise<boolean> {
+  const store = await getStore();
+  const updated = await store.employers.rejectCrmLink(employerId, note);
+  return updated !== null;
 }
 
 export interface ModerationQueue {

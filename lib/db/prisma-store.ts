@@ -378,6 +378,31 @@ export function createPrismaStore(): DataStore {
         });
         return toEmployerRecord(row);
       },
+      async requestCrmLink(id, note) {
+        const row = await prisma.employer
+          .update({ where: { id }, data: { crmLinkRequestedAt: new Date(), crmLinkNote: note } })
+          .catch(() => null);
+        return row ? toEmployerRecord(row) : null;
+      },
+      async listCrmLinkRequests() {
+        const rows = await prisma.employer.findMany({
+          where: { crmLinkRequestedAt: { not: null }, crmClientId: null },
+          orderBy: { crmLinkRequestedAt: 'asc' },
+        });
+        return rows.map(toEmployerRecord);
+      },
+      async resolveCrmLink(id, crmClientId) {
+        const row = await prisma.employer
+          .update({ where: { id }, data: { crmClientId, crmLinkRequestedAt: null, crmLinkNote: null } })
+          .catch(() => null);
+        return row ? toEmployerRecord(row) : null;
+      },
+      async rejectCrmLink(id, note) {
+        const row = await prisma.employer
+          .update({ where: { id }, data: { crmLinkRequestedAt: null, crmLinkNote: note } })
+          .catch(() => null);
+        return row ? toEmployerRecord(row) : null;
+      },
     },
 
     vacancies: {

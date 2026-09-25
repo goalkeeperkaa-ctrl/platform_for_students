@@ -92,6 +92,8 @@ const EMPTY_COMPANY = {
   consentAt: null,
   inn: null,
   phoneEnc: null,
+  crmLinkRequestedAt: null,
+  crmLinkNote: null,
 };
 
 async function seed(): Promise<Tables> {
@@ -797,6 +799,35 @@ export async function createMemoryStore(): Promise<DataStore> {
         };
         t.accounts.push(account);
         t.employers.push(employer);
+        return clone(employer);
+      },
+      async requestCrmLink(id, note) {
+        const employer = t.employers.find((e) => e.id === id);
+        if (!employer) return null;
+        employer.crmLinkRequestedAt = now();
+        employer.crmLinkNote = note;
+        return clone(employer);
+      },
+      async listCrmLinkRequests() {
+        return clone(
+          t.employers
+            .filter((e) => e.crmLinkRequestedAt !== null && e.crmClientId === null)
+            .sort((a, b) => +(a.crmLinkRequestedAt ?? 0) - +(b.crmLinkRequestedAt ?? 0)),
+        );
+      },
+      async resolveCrmLink(id, crmClientId) {
+        const employer = t.employers.find((e) => e.id === id);
+        if (!employer) return null;
+        employer.crmClientId = crmClientId;
+        employer.crmLinkRequestedAt = null;
+        employer.crmLinkNote = null;
+        return clone(employer);
+      },
+      async rejectCrmLink(id, note) {
+        const employer = t.employers.find((e) => e.id === id);
+        if (!employer) return null;
+        employer.crmLinkRequestedAt = null;
+        employer.crmLinkNote = note;
         return clone(employer);
       },
     },

@@ -26,6 +26,15 @@ export default async function EmployerCompanyPage() {
         companyId={employer.id}
         moderation={{ status: employer.moderationStatus, note: employer.moderationNote }}
         selfRegistered={employer.crmClientId === null}
+        crmLink={
+          employer.crmClientId
+            ? { linked: true }
+            : {
+                linked: false,
+                requestedAt: employer.crmLinkRequestedAt?.toISOString() ?? null,
+                note: employer.crmLinkNote,
+              }
+        }
         initial={{
           companyName: employer.companyName,
           contactName: employer.contactName,
