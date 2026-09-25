@@ -1393,6 +1393,21 @@ async function main() {
     const clientSession = new Session();
     (clientSession as any).cookie = clientEntered.cookie;
     check('кабинет компании клиента CRM открыт', (await clientSession.request('/employer')).status === 200);
+
+    // Реквизиты клиента CRM сверены по договору и лежат в CRM — здесь у
+    // него нет ИНН, и раньше это ошибочно блокировало отправку вакансии
+    // на проверку (см. hasCompanyProfile)
+    const clientVacancy = await clientSession.post('/api/employer/vacancies', {
+      ...vacancyForm,
+      photos: [],
+      submit: true,
+    });
+    check(
+      'клиент CRM без ИНН всё равно отправляет вакансию на проверку',
+      clientVacancy.status === 201 && clientVacancy.body?.status === 'PENDING',
+      clientVacancy.body,
+    );
+
     const clientReplay = await enterFromCrm(firstClientTicket);
     check('по тому же билету клиента второй раз не войти', clientReplay.location.includes('crm=used'), clientReplay.location);
   } else {

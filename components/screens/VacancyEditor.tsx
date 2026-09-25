@@ -361,16 +361,8 @@ export function VacancyEditor({
           </div>
         </Section>
 
-        <Section title="Задачи и требования">
+        <Section title="Кандидату">
           <div className="space-y-5">
-            <TextAreaField
-              label="Что делать"
-              value={form.responsibilities}
-              rows={5}
-              error={fieldError('responsibilities')}
-              hint={LINES_HINT}
-              onChange={(e) => patch({ responsibilities: e.target.value })}
-            />
             <TextAreaField
               label="Что нужно от кандидата"
               value={form.requirements}
@@ -387,11 +379,6 @@ export function VacancyEditor({
               hint={`${LINES_HINT} Например: обучение, питание, гибкий график.`}
               onChange={(e) => patch({ perks: e.target.value })}
             />
-          </div>
-        </Section>
-
-        <Section title="Рост и команда">
-          <div className="space-y-5">
             <TextAreaField
               label="Чему научится студент"
               value={form.learnings}
@@ -399,14 +386,6 @@ export function VacancyEditor({
               error={fieldError('learnings')}
               hint={`${LINES_HINT} Для студента это часто важнее оплаты.`}
               onChange={(e) => patch({ learnings: e.target.value })}
-            />
-            <TextAreaField
-              label="С кем предстоит работать"
-              value={form.team}
-              maxCount={600}
-              error={fieldError('team')}
-              hint="Команда, наставник, руководитель — кто встретит в первый день."
-              onChange={(e) => patch({ team: e.target.value })}
             />
           </div>
         </Section>

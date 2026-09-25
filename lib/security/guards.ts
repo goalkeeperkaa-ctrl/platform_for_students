@@ -103,6 +103,7 @@ export function assertCompanyProfileComplete(employer: {
   companyName: string;
   contactName: string;
   inn: string | null;
+  crmClientId: string | null;
 }): void {
   if (!hasCompanyProfile(employer)) {
     throw new HttpError(

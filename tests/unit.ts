@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { verifyStaffTicket } from '../lib/security/staff-ticket';
 import { staffCan, staffHome } from '../lib/staff-permissions';
 import { ageFromIso, fullYears, parseIsoDate } from '../lib/age';
-import { companyRegistrationSchema, innSchema } from '../lib/company';
+import { companyRegistrationSchema, hasCompanyProfile, innSchema } from '../lib/company';
 import { isValidInn } from '../lib/inn';
 import { rankInstitutions } from '../lib/rating';
 import { fitHours, maxHoursPerWeek } from '../lib/schedule';
@@ -107,6 +107,13 @@ test('регистрация компании требует телефон и �
     terms: true,
   };
   assert.equal(companyRegistrationSchema.safeParse(minimal).success, true);
+});
+test('клиенту CRM для отправки вакансии ИНН не нужен — он сверен по договору', () => {
+  const base = { companyName: 'Кофейни «Север»', contactName: 'Иван Иванов' };
+  assert.equal(hasCompanyProfile({ ...base, inn: null, crmClientId: 'client-sever' }), true);
+  assert.equal(hasCompanyProfile({ ...base, inn: null, crmClientId: null }), false);
+  assert.equal(hasCompanyProfile({ ...base, inn: '7707083893', crmClientId: null }), true);
+  assert.equal(hasCompanyProfile({ companyName: '', contactName: '', inn: null, crmClientId: 'client-sever' }), false);
 });
 
 console.log('\nЧасы по дням');

@@ -92,17 +92,21 @@ export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
  */
 export const COMPANY_PLACEHOLDER = '';
 
-/** Дозаполнены ли название компании, контакт и ИНН — нужны для проверки агентством. */
+/**
+ * Дозаполнены ли название компании, контакт и ИНН — нужны для проверки
+ * агентством. У клиентов CRM реквизиты уже сверены по договору и лежат
+ * в CRM, а не здесь (см. комментарий у Employer.inn), поэтому для них
+ * ИНН в этой проверке не требуется — иначе клиент CRM без ИНН на
+ * платформе не смог бы отправить вакансию на проверку никогда.
+ */
 export function hasCompanyProfile(employer: {
   companyName: string;
   contactName: string;
   inn: string | null;
+  crmClientId: string | null;
 }): boolean {
-  return (
-    employer.companyName.trim().length > 0 &&
-    employer.contactName.trim().length > 0 &&
-    Boolean(employer.inn)
-  );
+  if (employer.companyName.trim().length === 0 || employer.contactName.trim().length === 0) return false;
+  return employer.crmClientId !== null || Boolean(employer.inn);
 }
 
 export const companyRegistrationSchema = z.object({

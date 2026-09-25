@@ -64,7 +64,9 @@ const vacancyObject = z
       .trim()
       .min(20, 'Опишите вакансию хотя бы парой предложений')
       .max(1500, 'Не длиннее 1500 символов'),
-    responsibilities: listField(VACANCY_LIMITS.items).min(1, 'Добавьте хотя бы одну задачу'),
+    // Поле «Что делать» убрали из формы — раздел объединили с «Кандидату»;
+    // старые вакансии, у которых список уже заполнен, ничего не теряют
+    responsibilities: listField(VACANCY_LIMITS.items),
     requirements: listField(VACANCY_LIMITS.items),
     perks: listField(VACANCY_LIMITS.items),
     learnings: listField(VACANCY_LIMITS.learnings),
