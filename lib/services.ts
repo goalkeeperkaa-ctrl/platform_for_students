@@ -817,6 +817,11 @@ export async function listAdminStudents(): Promise<AdminStudentDTO[]> {
   }));
 }
 
+/** Только те, у кого загружена справка и решения по ней ещё нет — очередь для «Проверок» в CRM. */
+export async function listPendingStudyReview(): Promise<AdminStudentDTO[]> {
+  return (await listAdminStudents()).filter((s) => s.study === 'PENDING');
+}
+
 /**
  * Свайпы вправо, которые ждут подтверждения учёбы, — у студента без
  * отметки и без отклика на эту вакансию. Просроченные удаляются здесь же:

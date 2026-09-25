@@ -19,13 +19,24 @@ export function crmServiceSecret(): string | null {
 
 /** Бросает 401/503 — используется в начале служебных роутов /api/service/*. */
 export function assertServiceAuth(request: Request): void {
-  const secret = crmServiceSecret();
-  if (!secret) {
-    throw new HttpError(503, 'Служебный вход не настроен: нужен CRM_SERVICE_SECRET', 'SERVICE_NOT_CONFIGURED');
+  if (!hasServiceAuth(request)) {
+    throw new HttpError(
+      crmServiceSecret() ? 401 : 503,
+      crmServiceSecret() ? 'Неверный служебный токен' : 'Служебный вход не настроен: нужен CRM_SERVICE_SECRET',
+      crmServiceSecret() ? 'UNAUTHORIZED' : 'SERVICE_NOT_CONFIGURED',
+    );
   }
+}
+
+/**
+ * Не бросает — для мест, где служебный вызов лишь один из способов
+ * пройти проверку (см. /api/files: тот же файл читает и сессия
+ * сотрудника, и теперь CRM своим секретом).
+ */
+export function hasServiceAuth(request: Request): boolean {
+  const secret = crmServiceSecret();
+  if (!secret) return false;
   const header = request.headers.get('authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token || !safeEqual(token, secret)) {
-    throw new HttpError(401, 'Неверный служебный токен', 'UNAUTHORIZED');
-  }
+  return Boolean(token) && safeEqual(token, secret);
 }

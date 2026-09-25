@@ -191,6 +191,32 @@ export async function audit(
 }
 
 /**
+ * Запись в журнал для решений, принятых из CRM через служебный API —
+ * там нет своей сессии здесь, только тот, кто нажал кнопку в CRM
+ * (передаётся телом запроса). accountId остаётся пустым: подставлять
+ * туда служебный или чужой accountId значило бы приписать действие не
+ * тому человеку, а настоящего accountId в этой базе для него нет.
+ */
+export async function auditService(actorLabel: string, input: AuditInput, requestHeaders?: Headers): Promise<void> {
+  try {
+    const store = await getStore();
+    const h = requestHeaders ?? headers();
+    await store.audit.log({
+      accountId: null,
+      actorLabel: `CRM:${actorLabel}`,
+      action: input.action,
+      entity: input.entity ?? null,
+      entityId: input.entityId ?? null,
+      ip: clientIp(h),
+      userAgent: h.get('user-agent'),
+      meta: input.meta ?? null,
+    });
+  } catch (err) {
+    console.error('[audit] не удалось записать событие:', err);
+  }
+}
+
+/**
  * Защита от межсайтовой отправки форм.
  *
  * Куки помечены SameSite=Lax, поэтому браузер и так не приложит их к

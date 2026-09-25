@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fail, handle } from '@/lib/api';
 import { getStore } from '@/lib/db';
 import { getSession } from '@/lib/security/guards';
+import { hasServiceAuth } from '@/lib/security/service-auth';
 import { staffCan } from '@/lib/staff-permissions';
 import { readStored } from '@/lib/storage';
 import { isVacancyVisible } from '@/lib/vacancy';
@@ -20,25 +21,30 @@ export const dynamic = 'force-dynamic';
  * работодатель не видит никогда: учёбу за него проверяет агентство.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { kind: string; name: string } },
 ) {
   return handle(async () => {
-    const session = await getSession();
+    // CRM читает файлы модерации и справок своим сервером — там больше нет
+    // сотрудника с сессией здесь, а решения по компаниям, вакансиям и
+    // справкам теперь принимаются в «Проверках» CRM (см. app/api/service).
+    const serviceAccess = hasServiceAuth(request);
+    const session = serviceAccess ? null : await getSession();
 
     // Логотип, фото и видео компании — не персональные данные, их видит и
     // гость на странице компании. Но только одобренной: страница компании
     // на модерации не публична, и её медиафайлы тоже.
-    if (params.kind === 'company' || params.kind === 'companyVideo') {
+    if (!serviceAccess && (params.kind === 'company' || params.kind === 'companyVideo')) {
       return readCompanyFile(session, params.kind, params.name);
     }
 
-    if (!session) return fail(401, 'Требуется вход в систему', 'UNAUTHORIZED');
-
-    const url = `/api/files/${params.kind}/${params.name}`;
-    if (!(await canRead(session, url))) {
-      // 404, а не 403: существование чужого файла — тоже информация
-      return fail(404, 'Файл не найден', 'NOT_FOUND');
+    if (!serviceAccess) {
+      if (!session) return fail(401, 'Требуется вход в систему', 'UNAUTHORIZED');
+      const url = `/api/files/${params.kind}/${params.name}`;
+      if (!(await canRead(session, url))) {
+        // 404, а не 403: существование чужого файла — тоже информация
+        return fail(404, 'Файл не найден', 'NOT_FOUND');
+      }
     }
 
     const { body, type } = await readStored(params.kind, params.name);
