@@ -1,4 +1,4 @@
-import { CircleUserRound, MessageCircle } from 'lucide-react';
+import { Briefcase, Inbox, MessageCircle, Users } from 'lucide-react';
 import type { NavItem } from '@/components/layout/NavTabs';
 
 /**
@@ -8,25 +8,41 @@ import type { NavItem } from '@/components/layout/NavTabs';
  * вкладка появлялась там, куда её не забыли вписать. Три страницы — уже
  * достаточно, чтобы одна отстала.
  *
- * «Компания» и «Сообщения» — иконками, без подписи: ряд из пяти текстовых
- * вкладок не помещался бы на телефоне в одну строку без переноса.
+ * Все вкладки — иконками, без подписи. Разной длины текст «Отклики» /
+ * «Кандидаты» заставлял подложку активной вкладки менять ширину при
+ * переезде между ними — с иконками одинакового размера она просто
+ * скользит, не дёргаясь.
+ *
+ * «Компания» здесь больше нет: в неё ведёт аватар в шапке (см. UserMenu),
+ * а вкладки оставлены только тем разделам, у которых нет другого входа.
  */
 export function employerNav(applications: number, unread: number): NavItem[] {
   return [
-    { href: '/employer', label: 'Отклики', badge: applications, exact: true },
-    { href: '/employer/vacancies', label: 'Вакансии' },
-    { href: '/employer/candidates', label: 'Кандидаты' },
+    {
+      href: '/employer',
+      label: 'Отклики',
+      badge: applications,
+      exact: true,
+      icon: <Inbox className="size-[18px]" aria-hidden />,
+      hideLabel: true,
+    },
+    {
+      href: '/employer/vacancies',
+      label: 'Вакансии',
+      icon: <Briefcase className="size-[18px]" aria-hidden />,
+      hideLabel: true,
+    },
+    {
+      href: '/employer/candidates',
+      label: 'Кандидаты',
+      icon: <Users className="size-[18px]" aria-hidden />,
+      hideLabel: true,
+    },
     {
       href: '/employer/messages',
       label: 'Сообщения',
       badge: unread,
       icon: <MessageCircle className="size-[18px]" aria-hidden />,
-      hideLabel: true,
-    },
-    {
-      href: '/employer/company',
-      label: 'Компания',
-      icon: <CircleUserRound className="size-[18px]" aria-hidden />,
       hideLabel: true,
     },
   ];

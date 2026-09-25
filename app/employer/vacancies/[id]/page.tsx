@@ -29,7 +29,7 @@ export default async function EditVacancyPage({ params }: Props) {
 
   return (
     <AppShell
-      user={{ name: employer.companyName, subtitle: employer.contactName }}
+      user={{ name: employer.companyName, subtitle: employer.contactName, href: '/employer/company' }}
       nav={employerNav(board.applications.length, unread)}
     >
       {vacancy.crmId ? (

@@ -30,7 +30,10 @@ export default async function EmployerMessagesPage({
   const thread = valid ? await getThread(valid, viewer) : null;
 
   return (
-    <AppShell user={{ name: employer.companyName, subtitle: employer.contactName }} nav={nav}>
+    <AppShell
+      user={{ name: employer.companyName, subtitle: employer.contactName, href: '/employer/company' }}
+      nav={nav}
+    >
       {threads.length === 0 ? (
         <ChatEmpty viewerRole="EMPLOYER" />
       ) : (

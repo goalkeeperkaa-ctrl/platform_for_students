@@ -36,6 +36,7 @@ export function NavTabs({ items, className }: { items: NavItem[]; className?: st
         const active = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const hasBadge = item.badge !== undefined && item.badge > 0;
         return (
           <Link
             key={item.href}
@@ -45,8 +46,11 @@ export function NavTabs({ items, className }: { items: NavItem[]; className?: st
             aria-label={item.hideLabel ? item.label : undefined}
             title={item.hideLabel ? item.label : undefined}
             className={cn(
-              'relative flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors duration-300',
-              item.hideLabel && 'px-3',
+              'relative flex items-center rounded-full text-[13px] font-medium transition-colors duration-300',
+              // Иконка без подписи — фиксированный квадрат: у всех вкладок
+              // одинаковая ширина, поэтому подложка активной вкладки просто
+              // скользит, а не меняет размер, переезжая между ними
+              item.hideLabel ? 'size-10 justify-center' : 'gap-1.5 px-3.5 py-2',
               active ? 'text-paper' : 'text-paper/55 hover:text-paper/85',
             )}
           >
@@ -59,7 +63,17 @@ export function NavTabs({ items, className }: { items: NavItem[]; className?: st
             )}
             {item.icon && <span className="relative flex shrink-0 items-center">{item.icon}</span>}
             <span className={cn('relative whitespace-nowrap', item.hideLabel && 'sr-only')}>{item.label}</span>
-            {item.badge !== undefined && item.badge > 0 && (
+            {hasBadge && item.hideLabel && (
+              // Значок точкой поверх иконки — не в общем потоке: иначе он
+              // и растягивал бы вкладку ровно так же, как раньше текст
+              <span
+                aria-hidden
+                className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-accent-500 px-1 text-center text-[9.5px] font-semibold leading-[16px] text-ink"
+              >
+                {item.badge}
+              </span>
+            )}
+            {hasBadge && !item.hideLabel && (
               <span
                 className={cn(
                   'relative min-w-[18px] rounded-full px-1.5 py-0.5 text-center text-[10.5px] leading-none tabular-nums',

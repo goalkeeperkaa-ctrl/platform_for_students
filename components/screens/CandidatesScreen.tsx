@@ -10,7 +10,7 @@ import {
   useTransform,
   type PanInfo,
 } from 'framer-motion';
-import { Briefcase, Filter, GraduationCap, MapPin, Search, Users } from 'lucide-react';
+import { Clock, Filter, GraduationCap, MapPin, Search, Users } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Chip, Tag } from '@/components/ui/Chip';
 import { SelectField, TextField } from '@/components/ui/Field';
@@ -392,7 +392,7 @@ function CandidateCard({
 
         {student.workDays.length > 0 && (
           <div className="mt-5 flex items-center gap-2">
-            <Briefcase className="size-3.5 shrink-0 text-paper-faint" aria-hidden />
+            <Clock className="size-3.5 shrink-0 text-paper-faint" aria-hidden />
             <div className="flex flex-wrap gap-1">
               {student.workDays.map((day) => (
                 <span key={day} className="rounded-md bg-paper/[0.06] px-1.5 py-0.5 text-[11px] font-medium text-paper/70">

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { History, Inbox, Layers, MessageCircle } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { countUnread } from '@/lib/chat';
 import { getStore } from '@/lib/db';
@@ -39,13 +40,33 @@ export default async function StudentLayout({ children }: { children: React.Reac
     <AppShell
       user={{ name: studentName(student), subtitle: student.university, href: '/profile' }}
       nav={[
-        { href: '/feed', label: 'Лента' },
-        { href: '/applications', label: 'Отклики', badge: applications.length + waiting },
+        // Все вкладки — иконками: с текстом разной длины подложка активной
+        // вкладки при переезде между ними меняла ширину, дёргаясь. «Профиль»
+        // здесь нет — в него ведёт аватар в шапке.
+        { href: '/feed', label: 'Лента', icon: <Layers className="size-[18px]" aria-hidden />, hideLabel: true },
+        {
+          href: '/applications',
+          label: 'Отклики',
+          badge: applications.length + waiting,
+          icon: <Inbox className="size-[18px]" aria-hidden />,
+          hideLabel: true,
+        },
         // Значок сообщений показывает непрочитанное, а не общее число:
         // единственное, ради чего сюда заходят, — новый ответ
-        { href: '/messages', label: 'Сообщения', badge: unread },
-        { href: '/skipped', label: 'Пропущенные', badge: skipped.length },
-        { href: '/profile', label: 'Профиль' },
+        {
+          href: '/messages',
+          label: 'Сообщения',
+          badge: unread,
+          icon: <MessageCircle className="size-[18px]" aria-hidden />,
+          hideLabel: true,
+        },
+        {
+          href: '/skipped',
+          label: 'Пропущенные',
+          badge: skipped.length,
+          icon: <History className="size-[18px]" aria-hidden />,
+          hideLabel: true,
+        },
       ]}
     >
       {children}
