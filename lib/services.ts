@@ -22,6 +22,7 @@ import {
   type InstitutionPublicDTO,
   type ApplicationDTO,
   type ApplicationStatus,
+  type ApprovedCompanyDTO,
   type AuditEntryDTO,
   type CrmLinkRequestDTO,
   type EmployerApplicationDTO,
@@ -566,6 +567,32 @@ export async function rejectCrmLink(employerId: string, note: string): Promise<b
   const store = await getStore();
   const updated = await store.employers.rejectCrmLink(employerId, note);
   return updated !== null;
+}
+
+/**
+ * Одобренные компании без клиента в CRM и без заявки на привязку —
+ * для служебного API (см. app/api/service/companies). Раньше в CRM
+ * попадали только те, кто сам оставил заявку — остальные одобренные
+ * пропадали из виду среди клиентов насовсем.
+ */
+export async function listApprovedCompanies(): Promise<ApprovedCompanyDTO[]> {
+  const store = await getStore();
+  const [employers, pending] = await Promise.all([
+    store.employers.listApprovedUnlinked(),
+    store.vacancies.listByStatus('PENDING'),
+  ]);
+  const accounts = await Promise.all(employers.map((e) => store.accounts.findById(e.accountId)));
+  return employers.map((employer, i) => ({
+    employerId: employer.id,
+    companyName: employer.companyName,
+    contactName: employer.contactName,
+    email: accounts[i] ? decryptSafe(accounts[i]!.emailEnc) : '',
+    phone: decryptSafe(employer.phoneEnc, '') || null,
+    inn: employer.inn,
+    city: employer.city,
+    createdAt: employer.createdAt.toISOString(),
+    pendingVacancies: pending.filter((v) => v.employerId === employer.id).length,
+  }));
 }
 
 export interface ModerationQueue {

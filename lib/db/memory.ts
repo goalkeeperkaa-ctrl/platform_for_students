@@ -837,6 +837,13 @@ export async function createMemoryStore(): Promise<DataStore> {
         employer.crmLinkNote = note;
         return clone(employer);
       },
+      async listApprovedUnlinked() {
+        return clone(
+          t.employers
+            .filter((e) => e.moderationStatus === 'APPROVED' && e.crmClientId === null && e.crmLinkRequestedAt === null)
+            .sort((a, b) => +b.createdAt - +a.createdAt),
+        );
+      },
     },
 
     vacancies: {

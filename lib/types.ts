@@ -410,6 +410,24 @@ export interface CrmLinkRequestDTO {
   requestedAt: string;
 }
 
+/**
+ * Компания, одобренная на платформе, но ещё без клиента в CRM и без
+ * заявки на привязку (CrmLinkRequestDTO — про тех, кто сам попросил).
+ * Нужна, чтобы агентство видело в CRM вообще всех одобренных, а не
+ * только тех, кто попросил объединить профиль.
+ */
+export interface ApprovedCompanyDTO {
+  employerId: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string | null;
+  inn: string | null;
+  city: string | null;
+  createdAt: string;
+  pendingVacancies: number;
+}
+
 /** Вакансия в очереди модерации — в том виде, в каком её увидит студент. */
 export interface ModerationVacancyDTO {
   companyId: string;

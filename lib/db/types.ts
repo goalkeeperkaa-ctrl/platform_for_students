@@ -553,6 +553,12 @@ export interface DataStore {
     resolveCrmLink(id: string, crmClientId: string): Promise<EmployerRecord | null>;
     /** Отказ с пояснением — заявку можно подать снова. */
     rejectCrmLink(id: string, note: string): Promise<EmployerRecord | null>;
+    /**
+     * Одобренные компании без клиента в CRM и без заявки на привязку —
+     * чтобы агентство видело в CRM вообще всех одобренных, не только
+     * тех, кто сам попросил объединить профиль.
+     */
+    listApprovedUnlinked(): Promise<EmployerRecord[]>;
   };
 
   vacancies: {

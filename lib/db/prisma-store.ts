@@ -406,6 +406,13 @@ export function createPrismaStore(): DataStore {
           .catch(() => null);
         return row ? toEmployerRecord(row) : null;
       },
+      async listApprovedUnlinked() {
+        const rows = await prisma.employer.findMany({
+          where: { moderationStatus: 'APPROVED', crmClientId: null, crmLinkRequestedAt: null },
+          orderBy: { createdAt: 'desc' },
+        });
+        return rows.map(toEmployerRecord);
+      },
     },
 
     vacancies: {
