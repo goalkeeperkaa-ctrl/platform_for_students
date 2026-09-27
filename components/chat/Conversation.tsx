@@ -8,8 +8,23 @@ import { ApplicationStatusPill } from '@/components/ui/StatusPill';
 import { Composer, ComposerLocked } from './Composer';
 import { DaySeparator, MessageBubble } from './MessageBubble';
 import { durations, easeOutExpo } from '@/lib/motion';
-import { cn, dayLabel, isSameBurst } from '@/lib/utils';
-import type { MessageDTO, ThreadDTO } from '@/lib/types';
+import { cn, dayLabel, formatDate, isSameBurst } from '@/lib/utils';
+import { APPLICATION_STATUS_LABEL, type ApplicationStatus, type MessageDTO, type ThreadDTO } from '@/lib/types';
+
+/**
+ * Цвет статуса в превью строки списка — тот же смысл, что у
+ * ApplicationStatusPill (components/ui/StatusPill.tsx), но без рамки и
+ * заливки: здесь это строка текста на месте последнего сообщения,
+ * а не отдельный значок.
+ */
+const STATUS_PREVIEW_TONE: Record<ApplicationStatus, string> = {
+  NEW: 'text-accent-200',
+  VIEWED: 'text-paper/70',
+  INVITED: 'text-warn',
+  INTERVIEW: 'text-warn',
+  HIRED: 'text-yes-glow',
+  REJECTED: 'text-paper-faint',
+};
 
 /**
  * Одна переписка.
@@ -81,7 +96,7 @@ export function Conversation({
             {thread.vacancyTitle} · {thread.counterpartSubtitle}
           </p>
         </div>
-        <ApplicationStatusPill status={thread.status} className="hidden shrink-0 sm:inline-flex" />
+        <ApplicationStatusPill status={thread.status} className="shrink-0" />
       </header>
 
       <div
@@ -133,6 +148,19 @@ export function Conversation({
   );
 }
 
+/** Сегодня — время, раньше — короткая дата: как читает любой мессенджер. */
+function threadStamp(value: string): string {
+  const date = new Date(value);
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  return sameDay
+    ? new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(date)
+    : formatDate(date);
+}
+
 /** Строка списка диалогов. */
 export function ThreadRow({
   thread,
@@ -144,6 +172,7 @@ export function ThreadRow({
     counterpartName: string;
     counterpartPhotoUrl: string | null;
     vacancyTitle: string;
+    status: ApplicationStatus;
     lastMessageBody: string | null;
     lastMessageAuthor: 'STUDENT' | 'EMPLOYER' | null;
     lastMessageAt: string | null;
@@ -153,6 +182,17 @@ export function ThreadRow({
   onClick: () => void;
   viewerRole: 'STUDENT' | 'EMPLOYER';
 }) {
+  // Переписки ещё не было — вместо пустой строки показываем, на каком
+  // этапе отклик: то же самое hh.ru делает в списке диалогов. NEW не
+  // показываем — это «ещё не открыли», а не событие, о котором стоит
+  // сообщить.
+  const preview = thread.lastMessageBody ?? (thread.status !== 'NEW' ? APPLICATION_STATUS_LABEL[thread.status] : null);
+  const previewTone = thread.lastMessageBody
+    ? thread.unread > 0
+      ? 'text-paper/85'
+      : 'text-paper-dim'
+    : STATUS_PREVIEW_TONE[thread.status];
+
   return (
     <button
       type="button"
@@ -175,20 +215,13 @@ export function ThreadRow({
           <p className="truncate text-[14px] font-medium text-paper">{thread.counterpartName}</p>
           {thread.lastMessageAt && (
             <span className="shrink-0 text-[11px] tabular-nums text-paper-faint">
-              {new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(
-                new Date(thread.lastMessageAt),
-              )}
+              {threadStamp(thread.lastMessageAt)}
             </span>
           )}
         </div>
         <p className="truncate text-[12px] text-paper-faint">{thread.vacancyTitle}</p>
-        <p
-          className={cn(
-            'mt-0.5 truncate text-[12.5px]',
-            thread.unread > 0 ? 'text-paper/85' : 'text-paper-dim',
-          )}
-        >
-          {thread.lastMessageBody ?? 'Переписки ещё не было'}
+        <p className={cn('mt-0.5 truncate text-[12.5px]', previewTone)}>
+          {preview ?? 'Переписки ещё не было'}
         </p>
       </div>
       {thread.unread > 0 && (
