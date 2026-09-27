@@ -101,10 +101,16 @@ export async function verifyEmailCode(accountId: string, code: string): Promise<
 /**
  * Письмо со ссылкой сброса пароля.
  *
- * Ничего не сообщает о том, есть ли такая почта: ответ одинаковый всегда,
- * а письмо отправляется, не задерживая ответ, — иначе разница во времени
- * выдала бы, какие адреса зарегистрированы. Работодателю из CRM без пароля
- * письмо не уходит: он входит по коду, который выдаёт менеджер.
+ * Ничего не сообщает о том, есть ли такая почта: ответ одинаковый всегда
+ * (см. route.ts). Работодателю из CRM без пароля письмо не уходит: он
+ * входит по коду, который выдаёт менеджер.
+ *
+ * Отправка дожидается результата — раньше была void sendMail(...) без
+ * await ради постоянного времени ответа, но в serverless-функции это
+ * означало, что письмо могло не успеть уйти до заморозки инстанса после
+ * ответа: реального выигрыша в защите от перебора адресов это не давало
+ * (ранний return выше уже создаёт разницу во времени), а доставку рвало
+ * почти всегда.
  */
 export async function requestPasswordReset(email: string): Promise<void> {
   const store = await getStore();
@@ -121,7 +127,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
     tokenHash: hashResetToken(token),
     expiresAt: minutesAfter(new Date(), PASSWORD_RESET_TTL_MINUTES),
   });
-  void sendMail({
+  await sendMail({
     to: decryptSafe(account.emailEnc),
     ...passwordResetMail({ url: appUrl(`/reset/${token}`), minutes: PASSWORD_RESET_TTL_MINUTES }),
   });
