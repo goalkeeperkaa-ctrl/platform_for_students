@@ -10,6 +10,7 @@ import type {
 } from '@/lib/db/types';
 import {
   applicationStatusMail,
+  closedVacancyReminderMail,
   companyDecisionMail,
   messagesDigestMail,
   newApplicationMail,
@@ -25,6 +26,7 @@ import { decryptSafe } from '@/lib/security/crypto';
 import { buildStudyState, listWaitingSwipes } from '@/lib/services';
 import { pendingExpiresAt } from '@/lib/study';
 import type { ApplicationStatus, MessageAuthor } from '@/lib/types';
+import { CLOSED_VACANCY_AUTO_DELETE_DAYS, CLOSED_VACANCY_REMINDER_DAYS } from '@/lib/vacancy';
 
 /**
  * Уведомления на почту.
@@ -147,6 +149,8 @@ export interface NotificationRunResult {
   studyDeadline: number;
   pendingExpiry: number;
   messageDigests: number;
+  closedVacancyReminders: number;
+  closedVacancyDeletions: number;
 }
 
 /**
@@ -157,7 +161,13 @@ export interface NotificationRunResult {
  */
 export async function runNotificationJobs(now: Date = new Date()): Promise<NotificationRunResult> {
   const store = await getStore();
-  const result: NotificationRunResult = { studyDeadline: 0, pendingExpiry: 0, messageDigests: 0 };
+  const result: NotificationRunResult = {
+    studyDeadline: 0,
+    pendingExpiry: 0,
+    messageDigests: 0,
+    closedVacancyReminders: 0,
+    closedVacancyDeletions: 0,
+  };
 
   for (const student of await store.students.list()) {
     try {
@@ -224,6 +234,38 @@ export async function runNotificationJobs(now: Date = new Date()): Promise<Notif
       if (sent) result.messageDigests++;
     } catch (error) {
       console.error('[сводка] переписка пропущена:', error);
+    }
+  }
+
+  // Уборка снятых вакансий: без сохранения — удаляем через 3 дня, с
+  // сохранением — раз в неделю напоминаем, что она всё ещё лежит в базе.
+  for (const vacancy of await store.vacancies.listByStatus('CLOSED')) {
+    try {
+      if (!vacancy.closedAt || vacancy.crmId) continue; // старые записи и CRM-вакансии уборка не трогает
+
+      if (vacancy.keepAfterClose === false) {
+        if (now.getTime() - vacancy.closedAt.getTime() < CLOSED_VACANCY_AUTO_DELETE_DAYS * DAY_MS) continue;
+        await store.vacancies.delete(vacancy.id);
+        result.closedVacancyDeletions++;
+        continue;
+      }
+
+      if (vacancy.keepAfterClose === true) {
+        const since = vacancy.lastCleanupReminderAt ?? vacancy.closedAt;
+        if (now.getTime() - since.getTime() < CLOSED_VACANCY_REMINDER_DAYS * DAY_MS) continue;
+        const employer = await store.employers.findById(vacancy.employerId);
+        if (!employer) continue;
+        if (!(await store.notifications.claim(employer.accountId, `closed-vacancy-reminder:${vacancy.id}:${now.toDateString()}`))) continue;
+        const sent = await deliver(
+          employer.accountId,
+          closedVacancyReminderMail({ title: vacancy.title, url: appUrl('/employer/vacancies') }),
+          'reminder',
+        );
+        if (sent) result.closedVacancyReminders++;
+        await store.vacancies.update(vacancy.id, { lastCleanupReminderAt: now });
+      }
+    } catch (error) {
+      console.error('[уборка] снятая вакансия пропущена:', error);
     }
   }
 

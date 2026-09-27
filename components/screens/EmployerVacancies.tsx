@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Clock3, Pencil, Plus, Send, TriangleAlert } from 'lucide-react';
+import { Clock3, Pencil, Plus, Send, Trash2, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -32,6 +32,12 @@ function statusHint(vacancy: EmployerVacancyDTO, companyStatus: ModerationStatus
     case 'REJECTED':
       return 'Агентство вернуло вакансию. Поправьте и отправьте снова.';
     case 'CLOSED':
+      if (vacancy.keepAfterClose === false) {
+        return 'Снята с публикации. Не сохранена — будет удалена автоматически через 3 дня, или удалите сейчас.';
+      }
+      if (vacancy.keepAfterClose === true) {
+        return 'Снята с публикации и сохранена. Можно поправить и отправить на проверку снова или удалить.';
+      }
       return 'Снята с публикации. Можно поправить и отправить на проверку снова.';
   }
 }
@@ -57,22 +63,25 @@ export function EmployerVacancies({
   const toast = useToast();
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [closing, setClosing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
-  async function act(vacancy: EmployerVacancyDTO, action: 'submit' | 'close') {
+  async function act(vacancy: EmployerVacancyDTO, action: 'submit' | 'close' | 'delete', keep?: boolean) {
     setBusy((current) => new Set(current).add(vacancy.id));
     try {
       const response = await fetch(`/api/employer/vacancies/${vacancy.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...(keep !== undefined ? { keep } : {}) }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
         toast.error(data.error ?? 'Не удалось выполнить действие');
         return;
       }
-      toast.success(action === 'close' ? 'Вакансия снята' : 'Вакансия на проверке', `«${vacancy.title}»`);
+      const messages = { close: 'Вакансия снята', submit: 'Вакансия на проверке', delete: 'Вакансия удалена' };
+      toast.success(messages[action], `«${vacancy.title}»`);
       setClosing(null);
+      setDeleting(null);
       router.refresh();
     } catch {
       toast.error('Сеть недоступна', 'Проверьте соединение и попробуйте ещё раз');
@@ -167,13 +176,28 @@ export function EmployerVacancies({
                 {!vacancy.fromCrm &&
                   (closing === vacancy.id ? (
                     <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--hairline)] pt-4">
-                      <span className="mr-1 text-[13px] text-paper-dim">
-                        Закрыть вакансию? Студенты её не увидят, отклики сохранятся.
+                      <span className="mr-1 basis-full text-[13px] text-paper-dim">
+                        Закрыть вакансию? Студенты её не увидят, отклики сохранятся. Сохранить её в истории?
                       </span>
-                      <Button variant="danger" size="sm" loading={isBusy} onClick={() => void act(vacancy, 'close')}>
-                        Закрыть
+                      <Button variant="accent" size="sm" loading={isBusy} onClick={() => void act(vacancy, 'close', true)}>
+                        Сохранить и закрыть
+                      </Button>
+                      <Button variant="danger" size="sm" loading={isBusy} onClick={() => void act(vacancy, 'close', false)}>
+                        Не сохранять
                       </Button>
                       <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => setClosing(null)}>
+                        Отмена
+                      </Button>
+                    </div>
+                  ) : deleting === vacancy.id ? (
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--hairline)] pt-4">
+                      <span className="mr-1 basis-full text-[13px] text-paper-dim">
+                        Удалить вакансию навсегда? Отклики и переписка по ней исчезнут — это нельзя отменить.
+                      </span>
+                      <Button variant="danger" size="sm" loading={isBusy} onClick={() => void act(vacancy, 'delete')}>
+                        Удалить
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => setDeleting(null)}>
                         Отмена
                       </Button>
                     </div>
@@ -198,6 +222,17 @@ export function EmployerVacancies({
                       {vacancy.status !== 'CLOSED' && (
                         <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => setClosing(vacancy.id)}>
                           {vacancy.status === 'PUBLISHED' ? 'Снять с публикации' : 'Закрыть'}
+                        </Button>
+                      )}
+                      {vacancy.status === 'CLOSED' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Trash2 />}
+                          disabled={isBusy}
+                          onClick={() => setDeleting(vacancy.id)}
+                        >
+                          Удалить
                         </Button>
                       )}
                       <span className="ml-auto text-[12px] text-paper-faint">

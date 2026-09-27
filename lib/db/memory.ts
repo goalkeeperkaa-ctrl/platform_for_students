@@ -425,6 +425,9 @@ function vacancyFromCrm(item: CrmVacancyInput, employerId: string): VacancyRecor
     submittedAt: null,
     moderatedAt: null,
     approvedContent: null,
+    closedAt: null,
+    keepAfterClose: null,
+    lastCleanupReminderAt: null,
     publishedAt: item.publishedAt,
     syncedAt: now(),
     createdAt: now(),
@@ -886,6 +889,9 @@ export async function createMemoryStore(): Promise<DataStore> {
           moderationNote: null,
           moderatedAt: null,
           approvedContent: null,
+          closedAt: null,
+          keepAfterClose: null,
+          lastCleanupReminderAt: null,
           publishedAt: now(),
           syncedAt: now(),
           createdAt: now(),
@@ -901,6 +907,17 @@ export async function createMemoryStore(): Promise<DataStore> {
         const defined = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
         Object.assign(vacancy, structuredClone(defined), { updatedAt: now() });
         return clone(vacancy);
+      },
+      async delete(id) {
+        const index = t.vacancies.findIndex((v) => v.id === id);
+        if (index === -1) return;
+        t.vacancies.splice(index, 1);
+        t.swipes = t.swipes.filter((s) => s.vacancyId !== id);
+        const goneApplicationIds = new Set(
+          t.applications.filter((a) => a.vacancyId === id).map((a) => a.id),
+        );
+        t.applications = t.applications.filter((a) => a.vacancyId !== id);
+        t.messages = t.messages.filter((m) => !goneApplicationIds.has(m.applicationId));
       },
       async countAll() {
         return { active: t.vacancies.filter(visible).length, total: t.vacancies.length };
@@ -959,6 +976,9 @@ export async function createMemoryStore(): Promise<DataStore> {
               submittedAt: existing.submittedAt,
               moderatedAt: existing.moderatedAt,
               approvedContent: existing.approvedContent,
+              closedAt: existing.closedAt,
+              keepAfterClose: existing.keepAfterClose,
+              lastCleanupReminderAt: existing.lastCleanupReminderAt,
             });
             outcome.updated++;
           } else {

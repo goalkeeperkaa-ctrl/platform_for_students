@@ -159,6 +159,12 @@ export interface VacancyRecord {
   moderatedAt: Date | null;
   /** Последняя одобренная агентством версия содержимого; null — не одобрялась */
   approvedContent: VacancyContent | null;
+  /** Когда вакансию сняли с публикации. Null — не снималась (или снята до этого поля). */
+  closedAt: Date | null;
+  /** Решение при снятии: сохранить (true) или нет (false, автоудаление через 3 дня). Null — не спрашивали. */
+  keepAfterClose: boolean | null;
+  /** Когда в последний раз напомнили про сохранённую снятую вакансию. */
+  lastCleanupReminderAt: Date | null;
   publishedAt: Date;
   syncedAt: Date;
   createdAt: Date;
@@ -399,7 +405,16 @@ export type VacancyPatch = Partial<VacancyContent> &
   Partial<
     Pick<
       VacancyRecord,
-      'status' | 'isActive' | 'moderationNote' | 'submittedAt' | 'moderatedAt' | 'publishedAt' | 'approvedContent'
+      | 'status'
+      | 'isActive'
+      | 'moderationNote'
+      | 'submittedAt'
+      | 'moderatedAt'
+      | 'publishedAt'
+      | 'approvedContent'
+      | 'closedAt'
+      | 'keepAfterClose'
+      | 'lastCleanupReminderAt'
     >
   >;
 
@@ -581,6 +596,8 @@ export interface DataStore {
     listByVideo(url: string): Promise<VacancyRecord[]>;
     create(input: NewVacancyInput): Promise<VacancyRecord>;
     update(id: string, patch: VacancyPatch): Promise<VacancyRecord>;
+    /** Насовсем, вместе с откликами и перепиской (каскад в БД) — только для CLOSED. */
+    delete(id: string): Promise<void>;
     /** active — видимые студенту, total — все в базе */
     countAll(): Promise<{ active: number; total: number }>;
     syncFromCrm(items: CrmVacancyInput[]): Promise<SyncOutcome>;

@@ -122,7 +122,17 @@ export type VacancyInput = z.infer<typeof vacancyInputSchema>;
  */
 export const vacancySaveSchema = z.object({ submit: z.boolean().default(false) });
 
-export const vacancyActionSchema = z.object({ action: z.enum(['submit', 'close']) });
+export const vacancyActionSchema = z.object({
+  action: z.enum(['submit', 'close', 'delete']),
+  // Спрашивается только при закрытии: сохранить в истории или удалить
+  // (сразу либо через 3 дня автоматической уборкой — см. lib/notify.ts)
+  keep: z.boolean().optional(),
+});
+
+/** Через сколько дней после снятия без сохранения вакансию удаляет уборка. */
+export const CLOSED_VACANCY_AUTO_DELETE_DAYS = 3;
+/** Как часто напоминать о сохранённой снятой вакансии. */
+export const CLOSED_VACANCY_REMINDER_DAYS = 7;
 
 export const moderationDecisionSchema = z
   .object({

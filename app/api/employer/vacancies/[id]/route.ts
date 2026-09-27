@@ -62,6 +62,10 @@ export async function PATCH(request: Request, { params }: Params) {
       // не публиковалась, либо ждёт повторной проверки
       isActive: false,
       submittedAt: justSubmitted ? new Date() : vacancy.submittedAt,
+      // Отправлена повторно из CLOSED — уборка её больше не касается
+      ...(justSubmitted && vacancy.status === 'CLOSED'
+        ? { closedAt: null, keepAfterClose: null, lastCleanupReminderAt: null }
+        : {}),
     });
 
     await audit(
@@ -78,19 +82,39 @@ export async function PATCH(request: Request, { params }: Params) {
   });
 }
 
-/** Действие над вакансией: отправить на проверку или снять. */
+/** Действие над вакансией: отправить на проверку, снять или удалить. */
 export async function POST(request: Request, { params }: Params) {
   return handle(async () => {
     assertSameOrigin(request);
     const { session, employer, store, vacancy } = await ownVacancy(params.id);
-    const { action } = vacancyActionSchema.parse(await request.json());
+    const { action, keep } = vacancyActionSchema.parse(await request.json());
 
     if (action === 'close') {
-      // Повторное нажатие — не ошибка: результат уже тот, что просили
+      // Повторное нажатие — не ошибка: результат уже тот, что просили.
+      // Решение сохранить/не сохранять при этом не переспрашиваем.
       if (vacancy.status === 'CLOSED') return ok({ id: vacancy.id, status: vacancy.status });
-      const updated = await store.vacancies.update(vacancy.id, { status: 'CLOSED', isActive: false });
-      await audit(session, { action: 'vacancy.closed', entity: 'Vacancy', entityId: vacancy.id }, request.headers);
+      const updated = await store.vacancies.update(vacancy.id, {
+        status: 'CLOSED',
+        isActive: false,
+        closedAt: new Date(),
+        keepAfterClose: keep === true,
+        lastCleanupReminderAt: null,
+      });
+      await audit(
+        session,
+        { action: 'vacancy.closed', entity: 'Vacancy', entityId: vacancy.id, meta: { keep: keep === true } },
+        request.headers,
+      );
       return ok({ id: updated.id, status: updated.status });
+    }
+
+    if (action === 'delete') {
+      if (vacancy.status !== 'CLOSED') {
+        return fail(409, 'Удалить можно только снятую вакансию', 'NOT_CLOSED');
+      }
+      await store.vacancies.delete(vacancy.id);
+      await audit(session, { action: 'vacancy.deleted', entity: 'Vacancy', entityId: vacancy.id }, request.headers);
+      return ok({ id: vacancy.id, deleted: true });
     }
 
     if (vacancy.status === 'PENDING') return ok({ id: vacancy.id, status: vacancy.status });
@@ -104,6 +128,10 @@ export async function POST(request: Request, { params }: Params) {
       status: 'PENDING',
       isActive: false,
       submittedAt: new Date(),
+      // Возвращается в оборот — уборка её больше не касается
+      closedAt: null,
+      keepAfterClose: null,
+      lastCleanupReminderAt: null,
     });
     await audit(session, { action: 'vacancy.submitted', entity: 'Vacancy', entityId: vacancy.id }, request.headers);
     await notifyCrm('vacancy', `Новая вакансия: ${employer.companyName}`, updated.title, updated.id);

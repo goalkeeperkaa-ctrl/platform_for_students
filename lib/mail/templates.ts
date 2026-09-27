@@ -258,3 +258,17 @@ export function messagesDigestMail(input: { count: number; title: string; url: s
     footnote: REMINDERS_NOTE,
   });
 }
+
+/** Раз в неделю — про снятую вакансию, которую компания решила сохранить. */
+export function closedVacancyReminderMail(input: { title: string; url: string }): MailContent {
+  return renderMail({
+    subject: `Напоминание: «${input.title}» всё ещё снята`,
+    title: 'Снятая вакансия лежит в кабинете',
+    paragraphs: [
+      `Вакансия «${input.title}» снята с публикации и сохранена в истории — студенты её не видят.`,
+      'Если она больше не нужна, удалите её из кабинета — это освободит место в базе.',
+    ],
+    action: { label: 'Открыть вакансии', url: input.url },
+    footnote: REMINDERS_NOTE,
+  });
+}

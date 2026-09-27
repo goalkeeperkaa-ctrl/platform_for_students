@@ -458,6 +458,9 @@ export function createPrismaStore(): DataStore {
           }),
         );
       },
+      async delete(id) {
+        await prisma.vacancy.delete({ where: { id } });
+      },
       async countAll() {
         const [active, total] = await Promise.all([
           prisma.vacancy.count({ where: VISIBLE_VACANCY }),

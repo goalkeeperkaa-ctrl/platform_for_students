@@ -417,6 +417,19 @@ model Vacancy {
   /// непроверенный текст доходил бы до людей в обход модерации.
   approvedContent Json?
 
+  /// Момент снятия с публикации. Пусто у вакансии, которую не снимали, или
+  /// у старых записей до появления этого поля — их автоудаление не трогает,
+  /// чтобы не потерять историю, снятую до этой доработки.
+  closedAt DateTime?
+  /// Решение компании при снятии: сохранить в истории (правит только
+  /// напоминания раз в неделю) или нет (тогда через 3 дня после closedAt
+  /// вакансию удаляет уборка — см. lib/notify.ts). Null — решение ещё не
+  /// спрашивали (старые записи).
+  keepAfterClose Boolean?
+  /// Когда в последний раз напомнили про сохранённую снятую вакансию —
+  /// чтобы не слать письмо чаще раза в неделю.
+  lastCleanupReminderAt DateTime?
+
   publishedAt DateTime @default(now())
   syncedAt    DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -427,6 +440,7 @@ model Vacancy {
 
   @@index([isActive, publishedAt])
   @@index([employerId])
+  @@index([status, closedAt])
 }
 
 // ============ РЕШЕНИЯ СТУДЕНТА ============

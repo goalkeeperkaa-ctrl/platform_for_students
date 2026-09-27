@@ -368,6 +368,8 @@ export interface EmployerVacancyDTO {
   city: string;
   employmentType: EmploymentType;
   updatedAt: string;
+  /** Решение при снятии: сохранить, удалить или ещё не спрашивали (не CLOSED, либо старая запись) */
+  keepAfterClose: boolean | null;
 }
 
 /** Компания в очереди модерации. Почту видит только HR. */

@@ -450,6 +450,7 @@ export async function listEmployerVacancies(employerId: string): Promise<Employe
       city: v.city,
       employmentType: v.employmentType,
       updatedAt: v.updatedAt.toISOString(),
+      keepAfterClose: v.keepAfterClose,
     }));
 }
 
