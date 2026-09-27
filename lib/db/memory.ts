@@ -265,6 +265,7 @@ async function seed(): Promise<Tables> {
     consentIp: '127.0.0.1',
     createdAt: new Date(Date.now() - 9 * 86_400_000),
     updatedAt: now(),
+    applicationsViewedAt: null,
   };
   t.students.push(student);
 
@@ -552,6 +553,7 @@ export async function createMemoryStore(): Promise<DataStore> {
           consentIp: input.consentIp,
           createdAt: now(),
           updatedAt: now(),
+          applicationsViewedAt: null,
         };
         account.termsVersion = input.termsVersion;
         account.termsAcceptedAt = now();
@@ -593,6 +595,11 @@ export async function createMemoryStore(): Promise<DataStore> {
         else Object.assign(s, { studyDocUrl: null, studyDocName: null, studyDocAt: null });
         s.updatedAt = now();
         return clone(s);
+      },
+      async markApplicationsViewed(id) {
+        const s = t.students.find((x) => x.id === id);
+        if (!s) return;
+        s.applicationsViewedAt = now();
       },
       async rejectStudy(id, note) {
         const s = t.students.find((x) => x.id === id);

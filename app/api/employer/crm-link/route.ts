@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { fail, handle, ok } from '@/lib/api';
+import { notifyCrm } from '@/lib/notify-crm';
 import { requestCrmLink } from '@/lib/services';
 import { assertSameOrigin, requireEmployer } from '@/lib/security/guards';
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     }
 
     await requestCrmLink(employer.id, note?.trim() || null);
+    await notifyCrm('crm-link', `Заявка на привязку к CRM: ${employer.companyName}`, note?.trim() || undefined);
     return ok({ requested: true });
   });
 }

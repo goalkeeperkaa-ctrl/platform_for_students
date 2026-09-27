@@ -1,4 +1,6 @@
 import { fail, handle, ok } from '@/lib/api';
+import { studentName } from '@/lib/db/mappers';
+import { notifyCrm } from '@/lib/notify-crm';
 import { assertSameOrigin, audit, requireStudent } from '@/lib/security/guards';
 import { buildStudyState } from '@/lib/services';
 import { deleteStored } from '@/lib/storage';
@@ -37,6 +39,7 @@ export async function PUT(request: Request) {
     if (previous && previous !== input.url) await deleteStored(previous);
 
     await audit(session, { action: 'student.study.submitted', entity: 'Student', entityId: student.id }, request.headers);
+    await notifyCrm('study', `Новая справка: ${studentName(updated)}`, updated.university, updated.id);
     return ok({ study: buildStudyState(updated) });
   });
 }

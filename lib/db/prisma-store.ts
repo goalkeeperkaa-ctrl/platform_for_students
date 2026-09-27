@@ -190,6 +190,9 @@ export function createPrismaStore(): DataStore {
         });
         return toStudentRecord(row);
       },
+      async markApplicationsViewed(id) {
+        await prisma.student.updateMany({ where: { id }, data: { applicationsViewedAt: new Date() } });
+      },
       async rejectStudy(id, note) {
         const exists = await prisma.student.findUnique({ where: { id }, select: { id: true } });
         if (!exists) return null;

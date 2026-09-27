@@ -1,4 +1,5 @@
 import { fail, handle, ok } from '@/lib/api';
+import { notifyCrm } from '@/lib/notify-crm';
 import {
   assertCompanyProfileComplete,
   assertEmailVerified,
@@ -53,13 +54,14 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const status = statusAfterEdit(vacancy.status, submit);
+    const justSubmitted = status === 'PENDING' && vacancy.status !== 'PENDING';
     const updated = await store.vacancies.update(vacancy.id, {
       ...input,
       status,
       // После правки вакансии в ленте нет ни в каком случае: она либо ещё
       // не публиковалась, либо ждёт повторной проверки
       isActive: false,
-      submittedAt: status === 'PENDING' && vacancy.status !== 'PENDING' ? new Date() : vacancy.submittedAt,
+      submittedAt: justSubmitted ? new Date() : vacancy.submittedAt,
     });
 
     await audit(
@@ -67,6 +69,10 @@ export async function PATCH(request: Request, { params }: Params) {
       { action: 'vacancy.updated', entity: 'Vacancy', entityId: vacancy.id, meta: { from: vacancy.status, to: status } },
       request.headers,
     );
+
+    if (justSubmitted) {
+      await notifyCrm('vacancy', `Новая вакансия: ${employer.companyName}`, updated.title, updated.id);
+    }
 
     return ok({ id: updated.id, status: updated.status });
   });
@@ -100,6 +106,7 @@ export async function POST(request: Request, { params }: Params) {
       submittedAt: new Date(),
     });
     await audit(session, { action: 'vacancy.submitted', entity: 'Vacancy', entityId: vacancy.id }, request.headers);
+    await notifyCrm('vacancy', `Новая вакансия: ${employer.companyName}`, updated.title, updated.id);
     return ok({ id: updated.id, status: updated.status });
   });
 }

@@ -1,4 +1,5 @@
 import { fail, handle, ok } from '@/lib/api';
+import { notifyCrm } from '@/lib/notify-crm';
 import { assertCompanyProfileComplete, assertEmailVerified, assertSameOrigin, audit, requireEmployer } from '@/lib/security/guards';
 import { listEmployerVacancies } from '@/lib/services';
 import { VACANCY_LIMITS, vacancyInputSchema, vacancySaveSchema } from '@/lib/vacancy';
@@ -58,6 +59,15 @@ export async function POST(request: Request) {
       { action: submit ? 'vacancy.submitted' : 'vacancy.drafted', entity: 'Vacancy', entityId: vacancy.id },
       request.headers,
     );
+
+    if (submit) {
+      await notifyCrm(
+        'vacancy',
+        `Новая вакансия: ${employer.companyName}`,
+        vacancy.title,
+        vacancy.id,
+      );
+    }
 
     return ok({ id: vacancy.id, status: vacancy.status }, { status: 201 });
   });

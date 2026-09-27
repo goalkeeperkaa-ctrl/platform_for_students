@@ -5,7 +5,7 @@ import { countUnread } from '@/lib/chat';
 import { getStore } from '@/lib/db';
 import { studentName } from '@/lib/db/mappers';
 import { getSessionWithRole } from '@/lib/security/guards';
-import { countWaitingApplications } from '@/lib/services';
+import { listWaitingSwipes } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,12 +29,21 @@ export default async function StudentLayout({ children }: { children: React.Reac
   // куку и отправляем на вход.
   if (!student) redirect('/logout?reason=stale&next=/feed');
 
-  const [applications, skipped, unread, waiting] = await Promise.all([
+  const [applications, skipped, unread, waitingSwipes] = await Promise.all([
     store.applications.listByStudent(student.id),
     store.swipes.listByStudent(student.id, 'LEFT'),
     countUnread({ role: 'STUDENT', profileId: student.id }),
-    countWaitingApplications(student.id),
+    listWaitingSwipes(student.id),
   ]);
+
+  // Новое во «Откликах» с прошлого захода — не общее число, оно иначе
+  // никогда не убывало бы после просмотра (студент один раз откроет
+  // вкладку, а счётчик так и будет висеть с тем же числом годами).
+  const viewedAt = student.applicationsViewedAt;
+  const newApplications = viewedAt
+    ? applications.filter((a) => a.createdAt > viewedAt || a.statusChangedAt > viewedAt).length
+    : applications.length;
+  const newWaiting = viewedAt ? waitingSwipes.filter((s) => s.createdAt > viewedAt).length : waitingSwipes.length;
 
   return (
     <AppShell
@@ -47,7 +56,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
         {
           href: '/applications',
           label: 'Отклики',
-          badge: applications.length + waiting,
+          badge: newApplications + newWaiting,
           icon: <Inbox className="size-[18px]" aria-hidden />,
           hideLabel: true,
         },

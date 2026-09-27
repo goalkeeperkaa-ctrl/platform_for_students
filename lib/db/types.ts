@@ -77,6 +77,8 @@ export interface StudentRecord extends StudentPortfolio {
   consentIp: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Когда студент последний раз открывал вкладку «Отклики» — см. markApplicationsViewed */
+  applicationsViewedAt: Date | null;
 }
 
 export interface InstitutionRecord {
@@ -492,6 +494,8 @@ export interface DataStore {
     setStudyDocument(id: string, doc: { url: string; name: string } | null): Promise<StudentRecord | null>;
     /** HR вернул справку: файл снимается, причина остаётся студенту. */
     rejectStudy(id: string, note: string): Promise<StudentRecord | null>;
+    /** Студент открыл вкладку «Отклики» — счётчик в навигации гасится. */
+    markApplicationsViewed(id: string): Promise<void>;
     update(id: string, input: StudentProfileUpdate): Promise<StudentRecord>;
     /**
      * Удаление по требованию человека (152-ФЗ, право на отзыв согласия).

@@ -43,10 +43,15 @@ export function MessageBubble({
     >
       <div
         className={cn(
-          'max-w-[76%] rounded-2xl border px-3.5 py-2.5 sm:max-w-[68%]',
+          // Тень и более плотная заливка — иначе в светлой теме своя и чужая
+          // реплики почти сливались с фоном и друг с другом: разница была
+          // в 20% прозрачности акцента поверх почти такого же серого, то
+          // есть на глаз никакой. Переписка обязана читаться с одного
+          // взгляда, кто где, — это чат, а не список полей формы.
+          'max-w-[76%] rounded-2xl border px-3.5 py-2.5 shadow-sm sm:max-w-[68%]',
           mine
-            ? 'rounded-br-md border-accent-400/28 bg-accent-500/20'
-            : 'rounded-bl-md border-[var(--hairline)] bg-graphite-850/95',
+            ? 'rounded-br-md border-accent-400/40 bg-accent-500/85'
+            : 'rounded-bl-md border-[var(--hairline-strong)] bg-graphite-800',
         )}
       >
         <p className="whitespace-pre-wrap break-words text-[14.5px] leading-relaxed text-paper">
@@ -57,14 +62,14 @@ export function MessageBubble({
           <div
             className={cn(
               'mt-1 flex items-center gap-1.5 text-[11px] tabular-nums',
-              mine ? 'justify-end text-paper/45' : 'text-paper-faint',
+              mine ? 'justify-end text-paper/70' : 'text-paper-faint',
             )}
           >
             <span>{formatTime(message.createdAt)}</span>
             {/* Галочки только у своих: чужое «прочитано» ничего не сообщает */}
             {mine &&
               (pending ? null : message.readAt ? (
-                <CheckCheck className="size-3.5 text-accent-200" aria-label="Прочитано" />
+                <CheckCheck className="size-3.5" aria-label="Прочитано" />
               ) : (
                 <Check className="size-3.5" aria-label="Отправлено" />
               ))}

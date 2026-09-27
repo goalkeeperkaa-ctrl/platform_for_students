@@ -5,6 +5,7 @@ import { track } from '@/lib/analytics';
 import { COMPANY_PLACEHOLDER } from '@/lib/company';
 import { getStore, isAccountExistsError, isInnExistsError } from '@/lib/db';
 import { COMPANY_CONSENT_VERSION, TERMS_VERSION } from '@/lib/legal';
+import { notifyCrm } from '@/lib/notify-crm';
 import { confirmPendingRegistration, type PendingEmployerData } from '@/lib/pending-registration';
 import { audit, assertSameOrigin } from '@/lib/security/guards';
 import { clientIp, rateLimit } from '@/lib/security/rate-limit';
@@ -82,6 +83,11 @@ export async function POST(request: Request) {
       );
       await audit(session, { action: 'employer.registered', entity: 'Employer', entityId: employer.id }, request.headers);
       await track('company.registered', { employerId: employer.id });
+      await notifyCrm(
+        'company',
+        `Новая компания: ${employer.companyName}`,
+        'Зарегистрировалась самостоятельно — ждёт проверки перед публикацией.',
+      );
 
       return ok({ redirectTo: '/employer/company', moderationStatus: employer.moderationStatus }, { status: 201 });
     } catch (err) {
