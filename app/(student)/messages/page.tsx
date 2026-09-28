@@ -39,16 +39,7 @@ export default async function MessagesPage({
   const valid = requested && threads.some((t) => t.applicationId === requested) ? requested : null;
   const thread = valid ? await getThread(valid, viewer) : null;
 
-  return (
-    <>
-      <header className="mb-6">
-        <h1 className="text-display-md text-paper">Сообщения</h1>
-        <p className="mt-2.5 text-[14.5px] text-paper-dim">
-          Переписка идёт по каждому отклику отдельно — по той вакансии, на которую вы откликнулись.
-        </p>
-      </header>
-
-      <ChatScreen initialThreads={threads} initialThread={thread} viewerRole="STUDENT" />
-    </>
-  );
+  // Заголовок и подсказка живут внутри ChatScreen (шапка списка диалогов) —
+  // отдельный заголовок страницы поверх был бы вторым «Сообщения» подряд
+  return <ChatScreen initialThreads={threads} initialThread={thread} viewerRole="STUDENT" />;
 }

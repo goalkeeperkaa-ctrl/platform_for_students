@@ -37,16 +37,10 @@ export default async function EmployerMessagesPage({
       {threads.length === 0 ? (
         <ChatEmpty viewerRole="EMPLOYER" />
       ) : (
-        <>
-          <header className="mb-6">
-            <h1 className="text-display-md text-paper">Сообщения</h1>
-            <p className="mt-2.5 text-[14.5px] text-paper-dim">
-              Диалог заводите вы: студент сможет ответить, как только вы напишете первым или
-              измените статус его отклика.
-            </p>
-          </header>
-          <ChatScreen initialThreads={threads} initialThread={thread} viewerRole="EMPLOYER" />
-        </>
+        // Заголовок и подсказка живут внутри ChatScreen (шапка списка
+        // диалогов) — отдельный заголовок страницы поверх был бы вторым
+        // «Сообщения» подряд
+        <ChatScreen initialThreads={threads} initialThread={thread} viewerRole="EMPLOYER" />
       )}
     </AppShell>
   );

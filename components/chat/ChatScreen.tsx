@@ -154,7 +154,9 @@ export function ChatScreen({
         )}
       >
         <div className="flex items-baseline justify-between px-4 pb-3 pt-4">
-          <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-paper">Диалоги</h2>
+          {/* Единственный заголовок раздела — страница сама его не
+              дублирует (см. app/(student)/messages/page.tsx) */}
+          <h1 className="text-[19px] font-semibold tracking-[-0.015em] text-paper">Сообщения</h1>
           <span className="text-[12px] text-paper-faint">
             {totalUnread > 0
               ? `${totalUnread} ${plural(totalUnread, 'новое', 'новых', 'новых')}`
